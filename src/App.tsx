@@ -20,6 +20,7 @@ import AdminTickets from './pages/AdminTickets';
 import AdminArtworks from './pages/AdminArtworks';
 import AdminExhibitions from './pages/AdminExhibitions';
 import AdminOrders from './pages/AdminOrders';
+import AdminArtists from './pages/AdminArtists';
 import NotFound from './pages/NotFound';
 import ArtworkCheckout from './pages/ArtworkCheckout';
 import ExhibitionCheckout from './pages/ExhibitionCheckout';
@@ -27,19 +28,38 @@ import Payment from './pages/Payment';
 import PaymentSuccess from './pages/PaymentSuccess';
 import ChatBot from './components/ChatBot';
 import AdminLayout from './components/AdminLayout';
+import ArtistLogin from './pages/ArtistLogin';
+import ArtistSignup from './pages/ArtistSignup';
+import Artist from './pages/Artist';
+import ArtistArtworks from './pages/ArtistArtworks';
+import ArtistAddArtwork from './pages/ArtistAddArtwork';
+import ArtistEditArtwork from './pages/ArtistEditArtwork';
+import ArtistOrders from './pages/ArtistOrders';
 
 function App() {
   return (
     <div className="flex flex-col min-h-screen">
       <Routes>
+        {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout><Admin /></AdminLayout>} />
         <Route path="/admin/messages" element={<AdminLayout><AdminMessages /></AdminLayout>} />
         <Route path="/admin/tickets" element={<AdminLayout><AdminTickets /></AdminLayout>} />
         <Route path="/admin/artworks" element={<AdminLayout><AdminArtworks /></AdminLayout>} />
         <Route path="/admin/exhibitions" element={<AdminLayout><AdminExhibitions /></AdminLayout>} />
         <Route path="/admin/orders" element={<AdminLayout><AdminOrders /></AdminLayout>} />
+        <Route path="/admin/artists" element={<AdminLayout><AdminArtists /></AdminLayout>} />
         <Route path="/admin-login" element={<AdminLogin />} />
         
+        {/* Artist Routes */}
+        <Route path="/artist" element={<Artist />} />
+        <Route path="/artist/artworks" element={<ArtistArtworks />} />
+        <Route path="/artist/add-artwork" element={<ArtistAddArtwork />} />
+        <Route path="/artist/edit-artwork/:id" element={<ArtistEditArtwork />} />
+        <Route path="/artist/orders" element={<ArtistOrders />} />
+        <Route path="/artist-login" element={<ArtistLogin />} />
+        <Route path="/artist-signup" element={<ArtistSignup />} />
+        
+        {/* Public Routes */}
         <Route path="/" element={
           <>
             <Navbar />

@@ -9,6 +9,7 @@ interface AuthResponse {
   token?: string;
   user_id?: number;
   admin_id?: number;
+  artist_id?: number;
   name?: string;
   error?: string;
 }
@@ -25,6 +26,7 @@ interface RegisterData {
   email: string;
   password: string;
   phone: string;
+  bio?: string; // Optional for artist registration
 }
 
 // Interface for artwork data
@@ -32,6 +34,7 @@ export interface ArtworkData {
   id?: string;
   title: string;
   artist: string;
+  artist_id?: number;
   description: string;
   price: number;
   imageUrl: string;
@@ -65,18 +68,33 @@ interface ContactMessage {
   source?: string; // Added source field
 }
 
+// Interface for artist data
+export interface ArtistData {
+  id: number;
+  name: string;
+  email: string;
+  bio: string;
+  profile_image_url: string;
+  phone: string;
+  created_at: string;
+  artwork_count: number;
+}
+
 // Helper function to store auth data
-const storeAuthData = (data: AuthResponse, isAdmin: boolean) => {
+const storeAuthData = (data: AuthResponse, isAdmin: boolean, isArtist: boolean = false) => {
   if (data.token) {
     localStorage.setItem('token', data.token);
     localStorage.setItem('userName', data.name || '');
     localStorage.setItem('isAdmin', isAdmin ? 'true' : 'false');
+    localStorage.setItem('isArtist', isArtist ? 'true' : 'false');
     
-    // Store user or admin ID
+    // Store user, admin, or artist ID
     if (data.user_id) {
       localStorage.setItem('userId', data.user_id.toString());
     } else if (data.admin_id) {
       localStorage.setItem('adminId', data.admin_id.toString());
+    } else if (data.artist_id) {
+      localStorage.setItem('artistId', data.artist_id.toString());
     }
     
     return true;
@@ -117,6 +135,38 @@ export const registerUser = async (userData: RegisterData): Promise<AuthResponse
   }
 };
 
+// Register a new artist
+export const registerArtist = async (artistData: RegisterData): Promise<AuthResponse> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(`${API_URL}/register-artist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(artistData),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    const data = await response.json();
+    
+    if (response.ok) {
+      storeAuthData(data, false, true);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Artist registration error:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { error: 'Connection timeout. Server may be down or unreachable.' };
+    }
+    return { error: 'Network error. Please try again.' };
+  }
+};
+
 // Login a user
 export const loginUser = async (credentials: LoginData): Promise<AuthResponse> => {
   try {
@@ -142,6 +192,38 @@ export const loginUser = async (credentials: LoginData): Promise<AuthResponse> =
     return data;
   } catch (error) {
     console.error('Login error:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { error: 'Connection timeout. Server may be down or unreachable.' };
+    }
+    return { error: 'Network error. Please try again.' };
+  }
+};
+
+// Login as artist
+export const loginArtist = async (credentials: LoginData): Promise<AuthResponse> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(`${API_URL}/artist-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    const data = await response.json();
+    
+    if (response.ok) {
+      storeAuthData(data, false, true);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Artist login error:', error);
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { error: 'Connection timeout. Server may be down or unreachable.' };
     }
@@ -202,13 +284,25 @@ export const isAdmin = (): boolean => {
   return localStorage.getItem('isAdmin') === 'true';
 };
 
+// Check if user is an artist
+export const isArtist = (): boolean => {
+  return localStorage.getItem('isArtist') === 'true';
+};
+
+// Get artist ID
+export const getArtistId = (): string | null => {
+  return localStorage.getItem('artistId');
+};
+
 // Logout user
 export const logout = (): void => {
   localStorage.removeItem('token');
   localStorage.removeItem('userName');
   localStorage.removeItem('isAdmin');
+  localStorage.removeItem('isArtist');
   localStorage.removeItem('userId');
   localStorage.removeItem('adminId');
+  localStorage.removeItem('artistId');
 };
 
 // API request with authentication
@@ -271,6 +365,9 @@ export const authFetch = async (url: string, options: RequestInit = {}): Promise
       if (isAdmin()) {
         console.error('Admin authentication failed - consider logging in again');
       }
+      if (isArtist()) {
+        console.error('Artist authentication failed - consider logging in again');
+      }
       logout();
       throw new Error('Session expired. Please login again.');
     }
@@ -294,7 +391,7 @@ export const authFetch = async (url: string, options: RequestInit = {}): Promise
   }
 };
 
-// Create a new artwork (admin only)
+// Create a new artwork (admin or artist)
 export const createArtwork = async (artworkData: ArtworkData) => {
   console.log('Creating artwork with data:', artworkData);
   return await authFetch('/artworks', {
@@ -303,7 +400,7 @@ export const createArtwork = async (artworkData: ArtworkData) => {
   });
 };
 
-// Update existing artwork (admin only)
+// Update existing artwork (admin or artist)
 export const updateArtwork = async (id: string, artworkData: ArtworkData) => {
   console.log(`Updating artwork ${id} with data:`, artworkData);
   return await authFetch(`/artworks/${id}`, {
@@ -312,7 +409,7 @@ export const updateArtwork = async (id: string, artworkData: ArtworkData) => {
   });
 };
 
-// Delete artwork (admin only)
+// Delete artwork (admin or artist)
 export const deleteArtwork = async (id: string) => {
   console.log(`Deleting artwork ${id}`);
   return await authFetch(`/artworks/${id}`, {
@@ -371,6 +468,36 @@ export const getArtwork = async (id: string) => {
     return await response.json();
   } catch (error) {
     console.error('Error fetching artwork:', error);
+    throw error;
+  }
+};
+
+// Get all artist's artworks
+export const getArtistArtworks = async () => {
+  try {
+    return await authFetch('/artist/artworks');
+  } catch (error) {
+    console.error('Error fetching artist artworks:', error);
+    throw error;
+  }
+};
+
+// Get all artist's orders
+export const getArtistOrders = async () => {
+  try {
+    return await authFetch('/artist/orders');
+  } catch (error) {
+    console.error('Error fetching artist orders:', error);
+    throw error;
+  }
+};
+
+// Get all artists (admin only)
+export const getAllArtists = async () => {
+  try {
+    return await authFetch('/artists');
+  } catch (error) {
+    console.error('Error fetching artists:', error);
     throw error;
   }
 };

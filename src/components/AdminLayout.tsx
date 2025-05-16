@@ -1,98 +1,119 @@
 
-import React, { ReactNode, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LogOut, User } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { isAdmin, logout } from '@/services/api';
+import { Calendar, MessageSquare, Image, Ticket, ShoppingBag, LogOut, Users } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
-const AdminLayout = ({ children }: AdminLayoutProps) => {
+const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
+  const location = useLocation();
   const navigate = useNavigate();
-  const { logout, currentUser, isAuthenticated, isAdmin } = useAuth();
+  const currentPath = location.pathname;
   
-  useEffect(() => {
-    // Check if logged in and is admin
-    const token = localStorage.getItem('token');
-    const adminStatus = localStorage.getItem('isAdmin');
-    
-    console.log("Admin verification in AdminLayout:", { 
-      isAuthenticatedContext: isAuthenticated,
-      isAdminContext: isAdmin,
-      currentUser,
-      localStorageToken: token ? (token.substring(0, 20) + '...') : null,
-      localStorageIsAdmin: adminStatus
-    });
-    
-    if (!token) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to access admin features",
-        variant: "destructive"
-      });
-      navigate('/admin-login');
-      return;
-    }
-    
-    if (adminStatus !== 'true') {
-      toast({
-        title: "Access Denied",
-        description: "You need admin privileges to access this area",
-        variant: "destructive"
-      });
+  // Check if user is an admin
+  React.useEffect(() => {
+    if (!isAdmin()) {
       navigate('/admin-login');
     }
-  }, [navigate, isAuthenticated, currentUser, isAdmin]);
-  
+  }, [navigate]);
+
   const handleLogout = () => {
     logout();
     navigate('/admin-login');
   };
-  
-  const userInitials = currentUser?.name 
-    ? currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase()
-    : 'A';
-  
+
+  const isActive = (path: string) => {
+    return currentPath === path ? 'bg-gray-800' : '';
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* Admin header - simplified with just profile */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-4 h-16 flex justify-between items-center">
-          <div className="text-lg font-semibold">Admin Dashboard</div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600 mr-2">
-              {currentUser?.name || 'Admin User'} 
-              {currentUser?.isAdmin ? ' (Admin)' : ''}
-            </span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Avatar className="cursor-pointer">
-                  <AvatarFallback>{userInitials}</AvatarFallback>
-                </Avatar>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => navigate('/admin')}>
-                  <User className="w-4 h-4 mr-2" />
-                  Dashboard
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Log Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+    <div className="min-h-screen flex">
+      {/* Sidebar */}
+      <div className="bg-gray-900 text-white w-64 flex-shrink-0">
+        <div className="p-4">
+          <h1 className="text-2xl font-bold">Admin Panel</h1>
         </div>
-      </header>
+        
+        <nav className="mt-8">
+          <ul>
+            <li>
+              <Link 
+                to="/admin" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin')}`}
+              >
+                Dashboard
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/artworks" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/artworks')} flex items-center`}
+              >
+                <Image className="mr-2 h-4 w-4" /> Artworks
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/exhibitions" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/exhibitions')} flex items-center`}
+              >
+                <Calendar className="mr-2 h-4 w-4" /> Exhibitions
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/messages" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/messages')} flex items-center`}
+              >
+                <MessageSquare className="mr-2 h-4 w-4" /> Messages
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/tickets" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/tickets')} flex items-center`}
+              >
+                <Ticket className="mr-2 h-4 w-4" /> Tickets
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/orders" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/orders')} flex items-center`}
+              >
+                <ShoppingBag className="mr-2 h-4 w-4" /> Orders
+              </Link>
+            </li>
+            <li>
+              <Link 
+                to="/admin/artists" 
+                className={`block px-4 py-2 hover:bg-gray-800 ${isActive('/admin/artists')} flex items-center`}
+              >
+                <Users className="mr-2 h-4 w-4" /> Artists
+              </Link>
+            </li>
+          </ul>
+        </nav>
+        
+        <div className="absolute bottom-0 w-64 p-4">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center text-gray-300 hover:text-white"
+          >
+            <LogOut className="mr-2 h-4 w-4" /> Logout
+          </button>
+        </div>
+      </div>
       
       {/* Main content */}
-      <main className="flex-grow">
-        {children}
-      </main>
+      <div className="flex-1 overflow-x-auto">
+        <main className="p-6">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };

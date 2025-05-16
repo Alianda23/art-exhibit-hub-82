@@ -1,3 +1,4 @@
+
 import os
 import json
 import http.server
@@ -10,14 +11,14 @@ from urllib.parse import parse_qs, urlparse
 from decimal import Decimal
 
 # Import modules
-from auth import register_user, login_user, login_admin
+from auth import register_user, login_user, login_admin, register_artist, login_artist
 from artwork import get_all_artworks, get_artwork, create_artwork, update_artwork, delete_artwork
 from exhibition import get_all_exhibitions, get_exhibition, create_exhibition, update_exhibition, delete_exhibition
 from contact import create_contact_message, get_messages, update_message, json_dumps
 from db_setup import initialize_database
 from middleware import auth_required, admin_required, extract_auth_token, verify_token
 from mpesa import handle_stk_push_request, check_transaction_status, handle_mpesa_callback
-from db_operations import get_all_tickets, get_all_orders
+from db_operations import get_all_tickets, get_all_orders, get_artist_artworks, get_artist_orders, get_all_artists
 
 # Define the port
 PORT = 8000
@@ -303,6 +304,78 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self._set_response()
             self.wfile.write(json_dumps(response).encode())
             return
+
+        # Handle GET /artists (admin only)
+        elif path == '/artists':
+            print("Processing GET /artists request")
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify admin access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_admin", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Admin access required"}).encode())
+                return
+            
+            # Get artists from database
+            response = get_all_artists()
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # Handle GET /artist/artworks (artist only)
+        elif path == '/artist/artworks':
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify artist access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_artist", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Artist access required"}).encode())
+                return
+            
+            # Get artworks by artist ID
+            artist_id = payload.get("sub")
+            response = get_artist_artworks(artist_id)
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # Handle GET /artist/orders (artist only)
+        elif path == '/artist/orders':
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify artist access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_artist", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Artist access required"}).encode())
+                return
+            
+            # Get orders for artworks by artist ID
+            artist_id = payload.get("sub")
+            response = get_artist_orders(artist_id)
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
             
         # Handle GET /tickets/generate/{id} (generate ticket)
         elif path.startswith('/tickets/generate/') and len(path.split('/')) == 4:
@@ -392,6 +465,39 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json_dumps(response).encode())
             return
         
+        # Register artist
+        elif path == '/register-artist':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
+                return
+            
+            # Check required fields
+            required_fields = ['name', 'email', 'password']
+            missing_fields = [field for field in required_fields if field not in post_data]
+            
+            if missing_fields:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": f"Missing required fields: {', '.join(missing_fields)}"}).encode())
+                return
+            
+            # Register the artist
+            response = register_artist(
+                post_data['name'], 
+                post_data['email'], 
+                post_data['password'],
+                post_data.get('phone', ''),  # Optional field
+                post_data.get('bio', '')     # Optional field
+            )
+            
+            if "error" in response:
+                self._set_response(400)
+            else:
+                self._set_response(201)
+            
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
         # User login
         elif path == '/login':
             if not post_data:
@@ -407,6 +513,31 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             
             # Login the user
             response = login_user(post_data['email'], post_data['password'])
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Artist login
+        elif path == '/artist-login':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing login data"}).encode())
+                return
+            
+            # Check required fields
+            if 'email' not in post_data or 'password' not in post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Email and password required"}).encode())
+                return
+            
+            # Login the artist
+            response = login_artist(post_data['email'], post_data['password'])
             
             if "error" in response:
                 self._set_response(401)
@@ -442,9 +573,33 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json_dumps(response).encode())
             return
         
-        # Create artwork (admin only)
+        # Create artwork (admin or artist)
         elif path == '/artworks':
             auth_header = self.headers.get('Authorization', '')
+            token = extract_auth_token(auth_header)
+            
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
+                return
+            
+            # Check if user is admin or artist
+            if not (payload.get("is_admin", False) or payload.get("is_artist", False)):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Unauthorized: Admin or artist privileges required"}).encode())
+                return
+            
+            # Add artist_id to the post_data if the request is from an artist
+            if payload.get("is_artist", False):
+                post_data["artist_id"] = payload.get("sub")
+            
+            # Create artwork
             response = create_artwork(auth_header, post_data)
             
             if "error" in response:
@@ -589,11 +744,52 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         # Process based on path
         path = self.path
         
-        # Update artwork (admin only)
+        # Update artwork (admin or artist)
         if path.startswith('/artworks/') and len(path.split('/')) == 3:
             artwork_id = path.split('/')[2]
             auth_header = self.headers.get('Authorization', '')
             
+            # Extract token and verify
+            token = extract_auth_token(auth_header)
+            
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
+                return
+            
+            # Check if user is admin or the artist who created the artwork
+            is_admin = payload.get("is_admin", False)
+            is_artist = payload.get("is_artist", False)
+            artist_id = payload.get("sub")
+            
+            if not is_admin and is_artist:
+                # Verify if the artist owns this artwork
+                connection = get_db_connection()
+                if connection is None:
+                    self._set_response(500)
+                    self.wfile.write(json_dumps({"error": "Database connection failed"}).encode())
+                    return
+                
+                cursor = connection.cursor()
+                try:
+                    cursor.execute("SELECT artist_id FROM artworks WHERE id = %s", (artwork_id,))
+                    result = cursor.fetchone()
+                    
+                    if not result or str(result[0]) != str(artist_id):
+                        self._set_response(403)
+                        self.wfile.write(json_dumps({"error": "Unauthorized: You can only update your own artworks"}).encode())
+                        return
+                finally:
+                    cursor.close()
+                    connection.close()
+            
+            # If admin or verified artist, update artwork
             response = update_artwork(auth_header, artwork_id, post_data)
             
             if "error" in response:
@@ -649,11 +845,52 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         # Process based on path
         path = self.path
         
-        # Delete artwork (admin only)
+        # Delete artwork (admin or artist)
         if path.startswith('/artworks/') and len(path.split('/')) == 3:
             artwork_id = path.split('/')[2]
             auth_header = self.headers.get('Authorization', '')
             
+            # Extract token and verify
+            token = extract_auth_token(auth_header)
+            
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
+                return
+            
+            # Check if user is admin or the artist who created the artwork
+            is_admin = payload.get("is_admin", False)
+            is_artist = payload.get("is_artist", False)
+            artist_id = payload.get("sub")
+            
+            if not is_admin and is_artist:
+                # Verify if the artist owns this artwork
+                connection = get_db_connection()
+                if connection is None:
+                    self._set_response(500)
+                    self.wfile.write(json_dumps({"error": "Database connection failed"}).encode())
+                    return
+                
+                cursor = connection.cursor()
+                try:
+                    cursor.execute("SELECT artist_id FROM artworks WHERE id = %s", (artwork_id,))
+                    result = cursor.fetchone()
+                    
+                    if not result or str(result[0]) != str(artist_id):
+                        self._set_response(403)
+                        self.wfile.write(json_dumps({"error": "Unauthorized: You can only delete your own artworks"}).encode())
+                        return
+                finally:
+                    cursor.close()
+                    connection.close()
+            
+            # If admin or verified artist, delete artwork
             response = delete_artwork(auth_header, artwork_id)
             
             if "error" in response:

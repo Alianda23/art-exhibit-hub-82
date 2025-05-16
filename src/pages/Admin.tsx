@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { isAdmin } from '@/services/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, ShoppingBag, Ticket, Image, Calendar } from 'lucide-react';
+import { MessageSquare, ShoppingBag, Ticket, Image, Calendar, Users } from 'lucide-react';
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -132,6 +132,29 @@ const Admin = () => {
           <CardFooter className="bg-gray-50 px-6 py-4">
             <Button asChild className="w-full">
               <Link to="/admin/orders">Manage Orders</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+        
+        {/* Artists Management */}
+        <Card className="overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-pink-500 to-rose-500 text-white">
+            <CardTitle className="flex items-center">
+              <Users className="mr-2 h-6 w-6" />
+              Artists
+            </CardTitle>
+            <CardDescription className="text-white text-opacity-80">
+              View registered artists
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <p className="text-gray-600 mb-6">
+              See all registered artists and their artworks in the system.
+            </p>
+          </CardContent>
+          <CardFooter className="bg-gray-50 px-6 py-4">
+            <Button asChild className="w-full">
+              <Link to="/admin/artists">Manage Artists</Link>
             </Button>
           </CardFooter>
         </Card>

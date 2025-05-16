@@ -1,3 +1,4 @@
+
 import hashlib
 import secrets
 from database import get_db_connection, json_dumps
@@ -53,6 +54,48 @@ def register_user(name, email, password, phone):
             cursor.close()
             connection.close()
 
+def register_artist(name, email, password, phone, bio=""):
+    """Register a new artist"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    hashed_password = hash_password(password)
+    
+    try:
+        # Check if email already exists
+        cursor.execute("SELECT id FROM artists WHERE email = %s", (email,))
+        if cursor.fetchone():
+            return {"error": "Email already registered"}
+        
+        # Insert the new artist
+        query = """
+        INSERT INTO artists (name, email, password, phone, bio)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (name, email, hashed_password, phone, bio))
+        connection.commit()
+        
+        # Get the new artist ID
+        artist_id = cursor.lastrowid
+        
+        # Generate token for the new artist
+        token = generate_token(artist_id, name, False, True)
+        
+        return {
+            "token": token,
+            "artist_id": artist_id,
+            "name": name
+        }
+    except Exception as e:
+        print(f"Error registering artist: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
 def login_user(email, password):
     """Login a user"""
     connection = get_db_connection()
@@ -82,6 +125,41 @@ def login_user(email, password):
         }
     except Exception as e:
         print(f"Error logging in user: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def login_artist(email, password):
+    """Login an artist"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    hashed_password = hash_password(password)
+    
+    try:
+        # Check artist credentials
+        query = "SELECT id, name FROM artists WHERE email = %s AND password = %s"
+        cursor.execute(query, (email, hashed_password))
+        artist = cursor.fetchone()
+        
+        if not artist:
+            return {"error": "Invalid credentials"}
+        
+        # Generate token for the artist
+        artist_id, name = artist
+        token = generate_token(artist_id, name, False, True)
+        
+        return {
+            "token": token,
+            "artist_id": artist_id,
+            "name": name
+        }
+    except Exception as e:
+        print(f"Error logging in artist: {e}")
         return {"error": str(e)}
     finally:
         if connection.is_connected():
@@ -125,12 +203,13 @@ def login_admin(email, password):
             cursor.close()
             connection.close()
 
-def generate_token(user_id, name, is_admin):
+def generate_token(user_id, name, is_admin, is_artist=False):
     """Generate a JWT token for authentication"""
     payload = {
         "sub": str(user_id),  # Ensure user_id is converted to string
         "name": name,
         "is_admin": is_admin,
+        "is_artist": is_artist,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
     }
     

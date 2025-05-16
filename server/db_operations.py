@@ -199,3 +199,88 @@ def get_user_orders(user_id):
         if connection.is_connected():
             cursor.close()
             connection.close()
+
+def get_artist_artworks(artist_id):
+    """Get all artworks for a specific artist"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    
+    try:
+        query = """
+        SELECT a.*, 
+               (SELECT COUNT(*) FROM artwork_orders ao WHERE ao.artwork_id = a.id) as order_count
+        FROM artworks a
+        WHERE a.artist_id = %s
+        ORDER BY a.created_at DESC
+        """
+        cursor.execute(query, (artist_id,))
+        artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        return {"artworks": artworks}
+    except Exception as e:
+        print(f"Error getting artist artworks: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def get_artist_orders(artist_id):
+    """Get all orders for artworks by a specific artist"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get orders for artist's artworks
+        query = """
+        SELECT ao.*, a.title as artwork_title, u.name as buyer_name, u.email as buyer_email
+        FROM artwork_orders ao
+        JOIN artworks a ON ao.artwork_id = a.id
+        JOIN users u ON ao.user_id = u.id
+        WHERE a.artist_id = %s
+        ORDER BY ao.order_date DESC
+        """
+        cursor.execute(query, (artist_id,))
+        orders = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        return {"orders": orders}
+    except Exception as e:
+        print(f"Error getting artist orders: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def get_all_artists():
+    """Get all artists from database"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    
+    try:
+        query = """
+        SELECT a.id, a.name, a.email, a.bio, a.profile_image_url, a.phone, a.created_at,
+               (SELECT COUNT(*) FROM artworks WHERE artist_id = a.id) as artwork_count
+        FROM artists a
+        ORDER BY a.created_at DESC
+        """
+        cursor.execute(query)
+        artists = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        return {"artists": artists}
+    except Exception as e:
+        print(f"Error getting artists: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()

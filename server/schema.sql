@@ -18,11 +18,24 @@ CREATE TABLE IF NOT EXISTS admins (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Artists table
+CREATE TABLE IF NOT EXISTS artists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    bio TEXT,
+    profile_image_url VARCHAR(255),
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Artworks table
 CREATE TABLE IF NOT EXISTS artworks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     artist VARCHAR(255) NOT NULL,
+    artist_id INT,
     description TEXT,
     price DECIMAL(10, 2) NOT NULL,
     dimensions VARCHAR(100),
@@ -30,7 +43,8 @@ CREATE TABLE IF NOT EXISTS artworks (
     year INT,
     image_url VARCHAR(255),
     status ENUM('available', 'sold') DEFAULT 'available',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (artist_id) REFERENCES artists(id)
 );
 
 -- Exhibitions table
