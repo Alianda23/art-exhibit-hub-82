@@ -130,7 +130,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* AI Recommendations Section (Replaces Featured Artworks) */}
+      {/* Recommendations Section */}
       <div ref={artworksRef}>
         <ArtworkRecommendations />
       </div>

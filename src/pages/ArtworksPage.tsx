@@ -52,13 +52,11 @@ const ArtworksPage = () => {
     fetchArtworks();
   }, [toast]);
 
-  // Generate AI recommendations
+  // Generate personalized recommendations
   const generateRecommendations = () => {
     if (artworks.length === 0) return;
     
-    // Simulate AI recommendation logic
-    // In a real implementation, this would call an AI service
-    console.log("Generating AI recommendations based on user preferences");
+    console.log("Generating personalized recommendations");
     
     // For demonstration purposes, we'll consider the current search and price filters
     // and pick artworks that match those criteria as "personalized recommendations"
@@ -89,7 +87,7 @@ const ArtworksPage = () => {
     setShowRecommendations(true);
     
     toast({
-      title: "AI Recommendations Generated",
+      title: "Recommendations Generated",
       description: "Here are some artworks you might like based on your preferences.",
     });
   };
@@ -158,24 +156,24 @@ const ArtworksPage = () => {
             </div>
           </div>
           
-          {/* AI Recommendations Button */}
+          {/* Recommendations Button */}
           <div className="mt-6 flex justify-center">
             <Button 
               onClick={generateRecommendations}
               className="bg-gold hover:bg-gold-dark text-white flex items-center gap-2"
             >
               <Sparkles className="h-4 w-4" />
-              Get AI Recommendations
+              Get Recommendations
             </Button>
           </div>
         </div>
         
-        {/* AI Recommendations Section */}
+        {/* Recommendations Section */}
         {showRecommendations && (
           <div className="mb-12 bg-white p-6 rounded-lg shadow-md">
             <div className="flex items-center mb-4">
               <Sparkles className="h-5 w-5 text-gold mr-2" />
-              <h2 className="text-2xl font-serif font-bold">AI Recommendations For You</h2>
+              <h2 className="text-2xl font-serif font-bold">Recommendations For You</h2>
             </div>
             
             {recommendedArtworks.length > 0 ? (

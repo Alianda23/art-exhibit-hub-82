@@ -20,8 +20,7 @@ const ArtworkRecommendations = () => {
         const allArtworks = await getAllArtworks();
         console.log("Fetched artworks for recommendations:", allArtworks.length);
         
-        // Simulate AI recommendation by using user preferences
-        // In a real implementation, this would call an AI service
+        // Generate recommendations from all artworks
         const recommendations = generateRecommendations(allArtworks);
         setRecommendedArtworks(recommendations);
       } catch (error) {
@@ -39,13 +38,11 @@ const ArtworkRecommendations = () => {
     fetchAndGenerateRecommendations();
   }, [toast]);
 
-  // This function simulates AI recommendations
-  // In a real implementation, this would be replaced with actual AI model logic
+  // Generate personalized recommendations
   const generateRecommendations = (artworks: Artwork[]): Artwork[] => {
-    console.log("Generating AI recommendations");
+    console.log("Generating recommendations");
     
     // For demonstration purposes, pick 3 random artworks as "recommendations"
-    // In a real implementation, this would use a machine learning model
     if (artworks.length <= 3) {
       return artworks;
     } else {
@@ -62,7 +59,7 @@ const ArtworkRecommendations = () => {
           <div className="flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-gold" />
             <h2 className="text-3xl md:text-4xl font-serif font-bold">
-              AI <span className="text-gold">Recommendations</span>
+              Featured <span className="text-gold">Recommendations</span>
             </h2>
           </div>
           <Link to="/artworks">
@@ -74,7 +71,7 @@ const ArtworkRecommendations = () => {
         
         <div className="artwork-grid">
           {loading ? (
-            <p className="text-center w-full">Generating AI recommendations...</p>
+            <p className="text-center w-full">Loading recommendations...</p>
           ) : recommendedArtworks.length > 0 ? (
             recommendedArtworks.map((artwork) => (
               <ArtworkCard key={artwork.id} artwork={artwork} />
