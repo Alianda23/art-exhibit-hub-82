@@ -1,4 +1,3 @@
-
 from database import get_db_connection, dict_from_row, json_dumps
 from auth import verify_token
 import json
@@ -173,8 +172,8 @@ def get_artwork(artwork_id):
         # Format image URL if needed
         if artwork['image_url']:
             # Handle base64 images
-            if artwork['image_url'].startswith('data:') or 'base64' in artwork['image_url']:
-                # Save the base64 image to a file and get its path
+            if artwork['image_url'].startswith('data:') or artwork['image_url'].startswith('base64,'):
+                # Save the base64 image to a file and get the file path
                 saved_path = save_image_from_base64(artwork['image_url'])
                 if saved_path:
                     # Update the database with the new path
@@ -229,7 +228,8 @@ def create_artwork(auth_header, artwork_data):
     # Check if user is admin or artist
     is_admin = payload.get("is_admin", False)
     is_artist = payload.get("is_artist", False)
-    print(f"Is admin: {is_admin}, Is artist: {is_artist}")
+    artist_id = payload.get("sub") if is_artist else None
+    print(f"Is admin: {is_admin}, Is artist: {is_artist}, Artist ID: {artist_id}")
     
     if not (is_admin or is_artist):
         print("ERROR: Access denied - Neither admin nor artist")
@@ -267,12 +267,14 @@ def create_artwork(auth_header, artwork_data):
         if is_artist and not is_admin:
             artist_name = payload.get("name", artwork_data.get("artist", "Unknown Artist"))
             artwork_data["artist"] = artist_name
+            # Make sure we set the artist_id in the database
+            artwork_data["artist_id"] = artist_id
         
         print(f"Inserting artwork data: {artwork_data}")
         query = """
         INSERT INTO artworks (title, artist, description, price, image_url,
-                           dimensions, medium, year, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           dimensions, medium, year, status, artist_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         cursor.execute(query, (
             artwork_data.get("title"),
@@ -283,7 +285,8 @@ def create_artwork(auth_header, artwork_data):
             artwork_data.get("dimensions"),
             artwork_data.get("medium"),
             artwork_data.get("year"),
-            artwork_data.get("status", "available")
+            artwork_data.get("status", "available"),
+            artwork_data.get("artist_id", artist_id)  # Use artist_id from token if available
         ))
         connection.commit()
         

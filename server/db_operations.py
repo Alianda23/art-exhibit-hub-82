@@ -1,4 +1,3 @@
-
 from database import get_db_connection
 from decimal import Decimal
 import random
@@ -209,15 +208,20 @@ def get_artist_artworks(artist_id):
     cursor = connection.cursor()
     
     try:
+        # Get all artworks where the artist_id matches or where the artist name matches
+        # the name associated with the artist_id (for backward compatibility)
         query = """
         SELECT a.*, 
-               (SELECT COUNT(*) FROM artwork_orders ao WHERE ao.artwork_id = a.id) as order_count
+               COALESCE((SELECT COUNT(*) FROM artwork_orders ao WHERE ao.artwork_id = a.id), 0) as order_count
         FROM artworks a
-        WHERE a.artist_id = %s
+        LEFT JOIN artists art ON art.id = %s
+        WHERE a.artist_id = %s OR a.artist = (SELECT name FROM artists WHERE id = %s)
         ORDER BY a.created_at DESC
         """
-        cursor.execute(query, (artist_id,))
+        cursor.execute(query, (artist_id, artist_id, artist_id))
         artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        print(f"Artist {artist_id} artworks query result: {artworks}")
         
         return {"artworks": artworks}
     except Exception as e:
@@ -237,17 +241,19 @@ def get_artist_orders(artist_id):
     cursor = connection.cursor()
     
     try:
-        # Get orders for artist's artworks
+        # Get orders for both artist_id and artist name matches
         query = """
         SELECT ao.*, a.title as artwork_title, u.name as buyer_name, u.email as buyer_email
         FROM artwork_orders ao
         JOIN artworks a ON ao.artwork_id = a.id
         JOIN users u ON ao.user_id = u.id
-        WHERE a.artist_id = %s
+        WHERE a.artist_id = %s OR a.artist = (SELECT name FROM artists WHERE id = %s)
         ORDER BY ao.order_date DESC
         """
-        cursor.execute(query, (artist_id,))
+        cursor.execute(query, (artist_id, artist_id))
         orders = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        print(f"Artist {artist_id} orders query result: {orders}")
         
         return {"orders": orders}
     except Exception as e:
