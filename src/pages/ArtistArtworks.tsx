@@ -17,28 +17,45 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 const ArtistArtworks = () => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [artworkToDelete, setArtworkToDelete] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const fetchArtworks = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Fetching artist artworks...');
       const response = await getArtistArtworks();
-      setArtworks(response.artworks || []);
+      console.log('Artist artworks response:', response);
+      
+      if (response.error) {
+        setError(response.error);
+        toast({
+          title: "Error",
+          description: response.error,
+          variant: "destructive",
+        });
+        setArtworks([]);
+      } else {
+        setArtworks(response.artworks || []);
+        console.log('Artworks set:', response.artworks || []);
+      }
     } catch (error) {
       console.error('Failed to fetch artworks:', error);
+      setError('Failed to load artworks');
       toast({
         title: "Error",
         description: "Failed to load artworks. Please try again.",
         variant: "destructive",
       });
+      setArtworks([]);
     } finally {
       setLoading(false);
     }
@@ -46,7 +63,7 @@ const ArtistArtworks = () => {
 
   useEffect(() => {
     fetchArtworks();
-  }, [toast]);
+  }, []);
 
   const handleAddArtwork = () => {
     navigate('/artist/add-artwork');
@@ -102,6 +119,12 @@ const ArtistArtworks = () => {
             Add New Artwork
           </Button>
         </div>
+        
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
 
         {artworks.length === 0 ? (
           <div className="p-8 text-center">

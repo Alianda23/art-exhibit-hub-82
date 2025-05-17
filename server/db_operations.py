@@ -1,3 +1,4 @@
+
 from database import get_db_connection
 from decimal import Decimal
 import random
@@ -208,20 +209,47 @@ def get_artist_artworks(artist_id):
     cursor = connection.cursor()
     
     try:
+        # Debug to check the artist_id being used
+        print(f"Finding artworks for artist_id: {artist_id}")
+        
         # Get all artworks where the artist_id matches or where the artist name matches
-        # the name associated with the artist_id (for backward compatibility)
+        # the name associated with the artist_id
         query = """
         SELECT a.*, 
                COALESCE((SELECT COUNT(*) FROM artwork_orders ao WHERE ao.artwork_id = a.id), 0) as order_count
         FROM artworks a
-        LEFT JOIN artists art ON art.id = %s
-        WHERE a.artist_id = %s OR a.artist = (SELECT name FROM artists WHERE id = %s)
+        JOIN artists art ON art.id = %s
+        WHERE a.artist_id = %s OR a.artist = art.name
         ORDER BY a.created_at DESC
         """
-        cursor.execute(query, (artist_id, artist_id, artist_id))
+        cursor.execute(query, (artist_id, artist_id))
         artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         
         print(f"Artist {artist_id} artworks query result: {artworks}")
+        
+        # If no results found, try an alternative query to find by artist name only
+        if not artworks:
+            print(f"No artworks found with artist_id={artist_id}, trying to find by artist name")
+            name_query = """
+            SELECT name FROM artists WHERE id = %s
+            """
+            cursor.execute(name_query, (artist_id,))
+            artist_name_row = cursor.fetchone()
+            
+            if artist_name_row:
+                artist_name = artist_name_row[0]
+                print(f"Found artist name: {artist_name}, searching artworks by this name")
+                
+                backup_query = """
+                SELECT a.*, 
+                       COALESCE((SELECT COUNT(*) FROM artwork_orders ao WHERE ao.artwork_id = a.id), 0) as order_count
+                FROM artworks a
+                WHERE a.artist = %s
+                ORDER BY a.created_at DESC
+                """
+                cursor.execute(backup_query, (artist_name,))
+                artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+                print(f"Backup query results: {artworks}")
         
         return {"artworks": artworks}
     except Exception as e:
