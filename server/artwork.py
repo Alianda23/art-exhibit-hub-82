@@ -1,3 +1,4 @@
+
 from database import get_db_connection, dict_from_row, json_dumps
 from auth import verify_token
 import json
@@ -20,7 +21,7 @@ ensure_uploads_directory()
 # Function to handle image storage
 def save_image_from_base64(base64_str, name_prefix="artwork"):
     """Save a base64 image to the uploads directory and return the path"""
-    # Handle empty strings or None values
+    # ... keep existing code (base64 image handling)
     if not base64_str:
         return None
         
@@ -67,7 +68,7 @@ def save_image_from_base64(base64_str, name_prefix="artwork"):
         return None
 
 def get_all_artworks():
-    """Get all artworks from the database"""
+    # ... keep existing code (fetch all artworks)
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
@@ -120,7 +121,7 @@ def get_all_artworks():
             connection.close()
 
 def update_artwork_image(artwork_id, image_path):
-    """Update the image_url in the database for an artwork"""
+    # ... keep existing code (update artwork image)
     connection = get_db_connection()
     if connection is None:
         return False
@@ -145,7 +146,7 @@ def update_artwork_image(artwork_id, image_path):
             connection.close()
 
 def get_artwork(artwork_id):
-    """Get a specific artwork by ID"""
+    # ... keep existing code (get specific artwork)
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
@@ -193,7 +194,7 @@ def get_artwork(artwork_id):
             connection.close()
 
 def create_artwork(auth_header, artwork_data):
-    """Create a new artwork (admin only)"""
+    """Create a new artwork (admin or artist only)"""
     print(f"\n--- Create Artwork Request ---")
     print(f"Auth Header: {auth_header}")
     print(f"Artwork Data: {artwork_data}")
@@ -215,7 +216,7 @@ def create_artwork(auth_header, artwork_data):
         print("ERROR: No token found in header")
         return {"error": "Invalid authentication token"}
     
-    # Verify token and check if user is admin
+    # Verify token and check if user is admin or artist
     print(f"Verifying token: {token[:20]}...")
     payload = verify_token(token)
     print(f"Token verification result: {payload}")
@@ -225,13 +226,14 @@ def create_artwork(auth_header, artwork_data):
         print(f"ERROR: Token verification failed: {payload['error']}")
         return {"error": f"Authentication failed: {payload['error']}"}
     
-    # Check if user is admin
+    # Check if user is admin or artist
     is_admin = payload.get("is_admin", False)
-    print(f"Is admin: {is_admin}")
+    is_artist = payload.get("is_artist", False)
+    print(f"Is admin: {is_admin}, Is artist: {is_artist}")
     
-    if not is_admin:
-        print("ERROR: Access denied - Not an admin user")
-        return {"error": "Unauthorized access: Admin privileges required"}
+    if not (is_admin or is_artist):
+        print("ERROR: Access denied - Neither admin nor artist")
+        return {"error": "Unauthorized access: Admin or artist privileges required"}
     
     # Continue with artwork creation
     connection = get_db_connection()
@@ -260,6 +262,11 @@ def create_artwork(auth_header, artwork_data):
             else:
                 print("Failed to save image")
                 image_url = "/placeholder.svg"
+        
+        # If artist is creating artwork, use their name from token
+        if is_artist and not is_admin:
+            artist_name = payload.get("name", artwork_data.get("artist", "Unknown Artist"))
+            artwork_data["artist"] = artist_name
         
         print(f"Inserting artwork data: {artwork_data}")
         query = """
@@ -294,6 +301,7 @@ def create_artwork(auth_header, artwork_data):
 
 def update_artwork(auth_header, artwork_id, artwork_data):
     """Update an existing artwork (admin only)"""
+    # ... keep existing code (update artwork)
     if not auth_header:
         return {"error": "Authentication required"}
     
@@ -380,6 +388,7 @@ def update_artwork(auth_header, artwork_id, artwork_data):
 
 def delete_artwork(auth_header, artwork_id):
     """Delete an artwork (admin only)"""
+    # ... keep existing code (delete artwork)
     if not auth_header:
         return {"error": "Authentication required"}
     

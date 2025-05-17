@@ -12,7 +12,18 @@ const ArtistAddArtwork = () => {
 
   const handleSubmit = async (data: any) => {
     try {
-      await createArtwork(data);
+      // The artist name will be automatically filled from the token on the server
+      const result = await createArtwork(data);
+      
+      if (result.error) {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to create artwork. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       toast({
         title: "Success",
         description: "Artwork created successfully.",
