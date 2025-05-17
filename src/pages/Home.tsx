@@ -1,17 +1,15 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowRight, MapPin, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice, formatDateRange } from '@/utils/formatters';
-import ArtworkCard from '@/components/ArtworkCard';
+import ArtworkRecommendations from '@/components/ArtworkRecommendations';
 import ExhibitionCard from '@/components/ExhibitionCard';
-import { getAllArtworks, getAllExhibitions } from '@/services/api';
-import { Artwork, Exhibition } from '@/types';
+import { getAllExhibitions } from '@/services/api';
+import { Exhibition } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const Home = () => {
-  const [featuredArtworks, setFeaturedArtworks] = useState<Artwork[]>([]);
   const [featuredExhibitions, setFeaturedExhibitions] = useState<Exhibition[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -25,11 +23,7 @@ const Home = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const artworksData = await getAllArtworks();
         const exhibitionsData = await getAllExhibitions();
-        
-        // Get first 3 artworks
-        setFeaturedArtworks(artworksData.slice(0, 3));
         
         // Get first 3 exhibitions
         setFeaturedExhibitions(exhibitionsData.slice(0, 2));
@@ -136,33 +130,10 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Featured Artworks Section */}
-      <section ref={artworksRef} className="py-20 bg-secondary">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-serif font-bold">
-              Featured <span className="text-gold">Artworks</span>
-            </h2>
-            <Link to="/artworks">
-              <Button variant="ghost" className="text-gold hover:text-gold-dark flex items-center gap-2">
-                View All <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-          
-          <div className="artwork-grid">
-            {loading ? (
-              <p className="text-center w-full">Loading artworks...</p>
-            ) : featuredArtworks.length > 0 ? (
-              featuredArtworks.map((artwork) => (
-                <ArtworkCard key={artwork.id} artwork={artwork} />
-              ))
-            ) : (
-              <p className="text-center w-full">No artworks found</p>
-            )}
-          </div>
-        </div>
-      </section>
+      {/* AI Recommendations Section (Replaces Featured Artworks) */}
+      <div ref={artworksRef}>
+        <ArtworkRecommendations />
+      </div>
 
       {/* Featured Exhibitions Section */}
       <section ref={exhibitionsRef} className="py-20 bg-white">

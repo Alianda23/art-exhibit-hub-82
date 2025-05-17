@@ -1,20 +1,22 @@
-
 import React, { useState, useEffect } from 'react';
 import ArtworkCard from '@/components/ArtworkCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { formatPrice } from '@/utils/formatters';
-import { Search } from 'lucide-react';
+import { Search, Sparkles } from 'lucide-react';
 import { getAllArtworks } from '@/services/api';
 import { Artwork } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 const ArtworksPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState([0, 100000]);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [recommendedArtworks, setRecommendedArtworks] = useState<Artwork[]>([]);
   const { toast } = useToast();
   
   // Get min and max prices from artwork data
@@ -49,6 +51,48 @@ const ArtworksPage = () => {
     
     fetchArtworks();
   }, [toast]);
+
+  // Generate AI recommendations
+  const generateRecommendations = () => {
+    if (artworks.length === 0) return;
+    
+    // Simulate AI recommendation logic
+    // In a real implementation, this would call an AI service
+    console.log("Generating AI recommendations based on user preferences");
+    
+    // For demonstration purposes, we'll consider the current search and price filters
+    // and pick artworks that match those criteria as "personalized recommendations"
+    let recommendations: Artwork[] = [];
+    
+    if (searchTerm.trim() !== '') {
+      // If there's a search term, generate recommendations based on similar terms
+      const relevantTerms = searchTerm.toLowerCase().split(' ');
+      
+      recommendations = artworks
+        .filter(artwork => {
+          return relevantTerms.some(term => 
+            artwork.title.toLowerCase().includes(term) || 
+            artwork.description.toLowerCase().includes(term) ||
+            artwork.medium.toLowerCase().includes(term)
+          );
+        })
+        .slice(0, 3);
+    } else {
+      // Otherwise pick some random ones in the price range
+      recommendations = artworks
+        .filter(artwork => artwork.price >= priceRange[0] && artwork.price <= priceRange[1])
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+    }
+    
+    setRecommendedArtworks(recommendations);
+    setShowRecommendations(true);
+    
+    toast({
+      title: "AI Recommendations Generated",
+      description: "Here are some artworks you might like based on your preferences.",
+    });
+  };
 
   // Filter artworks based on search term and price range
   const filteredArtworks = artworks.filter((artwork) => {
@@ -113,7 +157,41 @@ const ArtworksPage = () => {
               </div>
             </div>
           </div>
+          
+          {/* AI Recommendations Button */}
+          <div className="mt-6 flex justify-center">
+            <Button 
+              onClick={generateRecommendations}
+              className="bg-gold hover:bg-gold-dark text-white flex items-center gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Get AI Recommendations
+            </Button>
+          </div>
         </div>
+        
+        {/* AI Recommendations Section */}
+        {showRecommendations && (
+          <div className="mb-12 bg-white p-6 rounded-lg shadow-md">
+            <div className="flex items-center mb-4">
+              <Sparkles className="h-5 w-5 text-gold mr-2" />
+              <h2 className="text-2xl font-serif font-bold">AI Recommendations For You</h2>
+            </div>
+            
+            {recommendedArtworks.length > 0 ? (
+              <div className="artwork-grid">
+                {recommendedArtworks.map((artwork) => (
+                  <ArtworkCard key={`rec-${artwork.id}`} artwork={artwork} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-center py-8 text-gray-600">
+                No recommendations found based on your current preferences.
+                Try adjusting your search or price range.
+              </p>
+            )}
+          </div>
+        )}
         
         {/* Results */}
         <div className="mb-6">
