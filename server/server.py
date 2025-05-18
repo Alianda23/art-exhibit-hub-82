@@ -1,4 +1,3 @@
-
 import os
 import json
 import http.server
@@ -19,6 +18,7 @@ from db_setup import initialize_database
 from middleware import auth_required, admin_required, extract_auth_token, verify_token
 from mpesa import handle_stk_push_request, check_transaction_status, handle_mpesa_callback
 from db_operations import get_all_tickets, get_all_orders, get_artist_artworks, get_artist_orders, get_all_artists
+from database import get_db_connection  # Add this import
 
 # Define the port
 PORT = 8000
@@ -778,10 +778,16 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                 
                 cursor = connection.cursor()
                 try:
-                    cursor.execute("SELECT artist_id FROM artworks WHERE id = %s", (artwork_id,))
+                    # Check both artist_id and artist name for ownership
+                    cursor.execute("""
+                        SELECT a.id FROM artworks a
+                        JOIN artists art ON art.id = %s
+                        WHERE a.id = %s AND (a.artist_id = %s OR a.artist = art.name)
+                    """, (artist_id, artwork_id, artist_id))
+                    
                     result = cursor.fetchone()
                     
-                    if not result or str(result[0]) != str(artist_id):
+                    if not result:
                         self._set_response(403)
                         self.wfile.write(json_dumps({"error": "Unauthorized: You can only update your own artworks"}).encode())
                         return
@@ -879,10 +885,16 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                 
                 cursor = connection.cursor()
                 try:
-                    cursor.execute("SELECT artist_id FROM artworks WHERE id = %s", (artwork_id,))
+                    # Check both artist_id and artist name for ownership
+                    cursor.execute("""
+                        SELECT a.id FROM artworks a
+                        JOIN artists art ON art.id = %s
+                        WHERE a.id = %s AND (a.artist_id = %s OR a.artist = art.name)
+                    """, (artist_id, artwork_id, artist_id))
+                    
                     result = cursor.fetchone()
                     
-                    if not result or str(result[0]) != str(artist_id):
+                    if not result:
                         self._set_response(403)
                         self.wfile.write(json_dumps({"error": "Unauthorized: You can only delete your own artworks"}).encode())
                         return

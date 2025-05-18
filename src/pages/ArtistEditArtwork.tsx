@@ -13,22 +13,48 @@ const ArtistEditArtwork = () => {
   const { toast } = useToast();
   const [artwork, setArtwork] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchArtwork = async () => {
       if (!id) return;
       
       try {
+        console.log('Fetching artwork with ID:', id);
         const response = await getArtwork(id);
-        setArtwork(response.artwork);
+        
+        if (response.error) {
+          console.error('Error response:', response.error);
+          setError(response.error);
+          toast({
+            title: "Error",
+            description: response.error,
+            variant: "destructive",
+          });
+          setArtwork(null);
+        } else if (!response.artwork) {
+          console.error('No artwork found');
+          setError("Artwork not found");
+          toast({
+            title: "Error",
+            description: "Artwork not found",
+            variant: "destructive",
+          });
+          setArtwork(null);
+        } else {
+          console.log('Artwork found:', response.artwork);
+          setArtwork(response.artwork);
+          setError(null);
+        }
       } catch (error) {
         console.error('Error fetching artwork:', error);
+        setError('Failed to fetch artwork details');
         toast({
           title: "Error",
           description: "Failed to fetch artwork details. Please try again.",
           variant: "destructive",
         });
-        navigate('/artist/artworks');
+        setArtwork(null);
       } finally {
         setLoading(false);
       }
@@ -41,12 +67,23 @@ const ArtistEditArtwork = () => {
     if (!id) return;
     
     try {
-      await updateArtwork(id, data);
-      toast({
-        title: "Success",
-        description: "Artwork updated successfully.",
-      });
-      navigate('/artist/artworks');
+      console.log('Updating artwork with data:', data);
+      const response = await updateArtwork(id, data);
+      
+      if (response.error) {
+        console.error('Error updating artwork:', response.error);
+        toast({
+          title: "Error",
+          description: response.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Artwork updated successfully.",
+        });
+        navigate('/artist/artworks');
+      }
     } catch (error) {
       console.error('Error updating artwork:', error);
       toast({
@@ -76,6 +113,12 @@ const ArtistEditArtwork = () => {
       <div className="space-y-6">
         <h1 className="text-3xl font-bold">Edit Artwork</h1>
         
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+        
         {artwork ? (
           <ArtworkForm
             initialData={artwork}
@@ -84,7 +127,7 @@ const ArtistEditArtwork = () => {
           />
         ) : (
           <div className="text-center p-8">
-            <p className="text-gray-500">Artwork not found.</p>
+            <p className="text-gray-500">Artwork not found. Please return to your artworks list and try again.</p>
           </div>
         )}
       </div>
