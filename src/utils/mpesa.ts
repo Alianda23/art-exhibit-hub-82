@@ -1,4 +1,3 @@
-
 // M-Pesa API utilities
 
 // M-Pesa credentials
@@ -132,35 +131,51 @@ export const finalizeOrder = async (
 };
 
 // Function to get user orders
-export const getUserOrders = async (userId: string): Promise<any> => {
+export const getUserOrders = async (userId: string) => {
   try {
-    const response = await fetch(`${API_URL}/orders/user/${userId}`, {
+    console.log(`Fetching orders for user ${userId}`);
+    const response = await fetch(`http://localhost:8000/orders/user/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      },
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
     });
-    
-    return await response.json();
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user orders');
+    }
+
+    const data = await response.json();
+    console.log('User orders data:', data);
+    return data;
   } catch (error) {
-    console.error('Get user orders error:', error);
+    console.error('Error fetching user orders:', error);
     throw error;
   }
 };
 
 // Function to generate exhibition ticket
-export const generateExhibitionTicket = async (bookingId: string): Promise<any> => {
+export const generateExhibitionTicket = async (bookingId: string) => {
   try {
-    const response = await fetch(`${API_URL}/tickets/generate/${bookingId}`, {
+    console.log(`Generating ticket for booking ${bookingId}`);
+    const response = await fetch(`http://localhost:8000/tickets/generate/${bookingId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      },
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
     });
-    
-    return await response.json();
+
+    if (!response.ok) {
+      throw new Error('Failed to generate ticket');
+    }
+
+    const data = await response.json();
+    console.log('Ticket generation response:', data);
+    return data;
   } catch (error) {
-    console.error('Ticket generation error:', error);
+    console.error('Error generating ticket:', error);
     throw error;
   }
 };
