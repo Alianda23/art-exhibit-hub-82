@@ -1,4 +1,3 @@
-
 // M-Pesa API utilities
 
 // M-Pesa credentials
@@ -135,25 +134,16 @@ export const finalizeOrder = async (
 export const getUserOrders = async (userId: string) => {
   try {
     console.log(`Fetching orders for user ${userId}`);
-    
-    // Get the authentication token from localStorage
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('Authentication token not found');
-    }
-    
-    const response = await fetch(`${API_URL}/orders/user/${userId}`, {
+    const response = await fetch(`http://localhost:8000/orders/user/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error response from server:', errorData);
-      throw new Error(errorData.error || 'Failed to fetch user orders');
+      throw new Error('Failed to fetch user orders');
     }
 
     const data = await response.json();
@@ -169,25 +159,16 @@ export const getUserOrders = async (userId: string) => {
 export const generateExhibitionTicket = async (bookingId: string) => {
   try {
     console.log(`Generating ticket for booking ${bookingId}`);
-    
-    // Get the authentication token from localStorage
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('Authentication token not found');
-    }
-    
-    const response = await fetch(`${API_URL}/tickets/generate/${bookingId}`, {
+    const response = await fetch(`http://localhost:8000/tickets/generate/${bookingId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error response from server:', errorData);
-      throw new Error(errorData.error || 'Failed to generate ticket');
+      throw new Error('Failed to generate ticket');
     }
 
     const data = await response.json();
