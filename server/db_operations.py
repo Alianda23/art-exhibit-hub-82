@@ -1,4 +1,3 @@
-
 from database import get_db_connection
 from decimal import Decimal
 import random
@@ -92,7 +91,7 @@ def get_all_orders():
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         # Get artwork orders
@@ -104,7 +103,7 @@ def get_all_orders():
         ORDER BY ao.order_date DESC
         """
         cursor.execute(query)
-        artwork_orders = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        artwork_orders = cursor.fetchall()
         
         for order in artwork_orders:
             order['type'] = 'artwork'
@@ -125,7 +124,7 @@ def get_all_tickets():
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         # Get exhibition bookings
@@ -161,7 +160,7 @@ def get_user_orders(user_id):
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         # Get user's artwork orders
@@ -176,7 +175,7 @@ def get_user_orders(user_id):
         ORDER BY ao.order_date DESC
         """
         cursor.execute(artwork_query, (user_id,))
-        orders = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        orders = cursor.fetchall()
         
         # Get user's exhibition bookings
         booking_query = """
@@ -189,7 +188,7 @@ def get_user_orders(user_id):
         ORDER BY eb.booking_date DESC
         """
         cursor.execute(booking_query, (user_id,))
-        bookings = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        bookings = cursor.fetchall()
         
         return {"orders": orders, "bookings": bookings}
     except Exception as e:
@@ -206,7 +205,7 @@ def get_artist_artworks(artist_id):
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         # Debug to check the artist_id being used
@@ -223,7 +222,7 @@ def get_artist_artworks(artist_id):
         ORDER BY a.created_at DESC
         """
         cursor.execute(query, (artist_id, artist_id))
-        artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        artworks = cursor.fetchall()
         
         print(f"Artist {artist_id} artworks query result: {artworks}")
         
@@ -248,7 +247,7 @@ def get_artist_artworks(artist_id):
                 ORDER BY a.created_at DESC
                 """
                 cursor.execute(backup_query, (artist_name,))
-                artworks = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+                artworks = cursor.fetchall()
                 print(f"Backup query results: {artworks}")
         
         return {"artworks": artworks}
@@ -266,7 +265,7 @@ def get_artist_orders(artist_id):
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         # Get orders for both artist_id and artist name matches
@@ -279,7 +278,7 @@ def get_artist_orders(artist_id):
         ORDER BY ao.order_date DESC
         """
         cursor.execute(query, (artist_id, artist_id))
-        orders = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        orders = cursor.fetchall()
         
         print(f"Artist {artist_id} orders query result: {orders}")
         
@@ -298,7 +297,7 @@ def get_all_artists():
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     
     try:
         query = """
@@ -308,7 +307,7 @@ def get_all_artists():
         ORDER BY a.created_at DESC
         """
         cursor.execute(query)
-        artists = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        artists = cursor.fetchall()
         
         return {"artists": artists}
     except Exception as e:
