@@ -16,7 +16,7 @@ const ArtworkCard = ({ artwork }: ArtworkCardProps) => {
   // Handle image_url vs imageUrl field name differences
   const imageSource = artwork.image_url || artwork.imageUrl;
   
-  // Process the image URL before rendering - this is crucial
+  // Process the image URL before rendering - log details for debugging
   const imageUrl = createImageSrc(imageSource);
   console.log(`ArtworkCard: Loading image for ${artwork.title}: ${imageSource} → ${imageUrl}`);
   
@@ -28,7 +28,10 @@ const ArtworkCard = ({ artwork }: ArtworkCardProps) => {
             src={imageUrl}
             alt={artwork.title}
             className="w-full h-full object-cover"
-            onError={handleImageError}
+            onError={(e) => {
+              console.log(`Image error for ${artwork.title}, trying fallback`);
+              handleImageError(e);
+            }}
           />
         </AspectRatio>
         {artwork.status === 'sold' && (

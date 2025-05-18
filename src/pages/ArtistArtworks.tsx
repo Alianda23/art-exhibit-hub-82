@@ -44,8 +44,14 @@ const ArtistArtworks = () => {
         });
         setArtworks([]);
       } else {
-        setArtworks(response.artworks || []);
-        console.log('Artworks set:', response.artworks || []);
+        const processedArtworks = (response.artworks || []).map((artwork: any) => ({
+          ...artwork,
+          // Ensure consistent image URL field (handle both image_url and imageUrl)
+          imageUrl: artwork.image_url || artwork.imageUrl || null
+        }));
+        
+        console.log('Processed artworks:', processedArtworks);
+        setArtworks(processedArtworks);
       }
     } catch (error) {
       console.error('Failed to fetch artworks:', error);
@@ -77,12 +83,22 @@ const ArtistArtworks = () => {
     if (!artworkToDelete) return;
     
     try {
-      await deleteArtwork(artworkToDelete);
-      toast({
-        title: "Success",
-        description: "Artwork deleted successfully.",
-      });
-      fetchArtworks();
+      const response = await deleteArtwork(artworkToDelete);
+      
+      if (response.error) {
+        console.error('Error deleting artwork:', response.error);
+        toast({
+          title: "Error",
+          description: response.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Artwork deleted successfully.",
+        });
+        fetchArtworks();
+      }
     } catch (error) {
       console.error('Failed to delete artwork:', error);
       toast({

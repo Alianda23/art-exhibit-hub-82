@@ -12,6 +12,13 @@ interface ArtworkTableProps {
 }
 
 const ArtworkTable: React.FC<ArtworkTableProps> = ({ artworks, onEdit, onDelete }) => {
+  const getImageUrl = (artwork: Artwork) => {
+    // Handle both image_url and imageUrl fields
+    const imageSource = artwork.image_url || artwork.imageUrl;
+    console.log(`ArtworkTable: Processing image for ${artwork.title}: Source=${imageSource}`);
+    return createImageSrc(imageSource);
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -30,7 +37,7 @@ const ArtworkTable: React.FC<ArtworkTableProps> = ({ artworks, onEdit, onDelete 
             <tr key={artwork.id}>
               <td className="px-6 py-4 whitespace-nowrap">
                 <img 
-                  src={createImageSrc(artwork.imageUrl)} 
+                  src={getImageUrl(artwork)} 
                   alt={artwork.title}
                   className="h-16 w-16 object-cover rounded"
                   onError={handleImageError}
@@ -38,7 +45,7 @@ const ArtworkTable: React.FC<ArtworkTableProps> = ({ artworks, onEdit, onDelete 
               </td>
               <td className="px-6 py-4 whitespace-nowrap">{artwork.title}</td>
               <td className="px-6 py-4 whitespace-nowrap">{artwork.artist}</td>
-              <td className="px-6 py-4 whitespace-nowrap">KSH {artwork.price.toLocaleString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap">KSH {artwork.price?.toLocaleString() || '0'}</td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 py-1 text-xs rounded-full ${
                   artwork.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'

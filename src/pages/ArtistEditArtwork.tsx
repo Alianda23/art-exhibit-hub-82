@@ -33,14 +33,21 @@ const ArtistEditArtwork = () => {
           });
           setArtwork(null);
         } else if (!response.artwork) {
-          console.error('No artwork found');
-          setError("Artwork not found");
-          toast({
-            title: "Error",
-            description: "Artwork not found",
-            variant: "destructive",
-          });
-          setArtwork(null);
+          console.error('No artwork found, checking if response is the artwork itself');
+          // Sometimes the response directly contains the artwork
+          if (response.id && response.title) {
+            console.log('Response is the artwork:', response);
+            setArtwork(response);
+            setError(null);
+          } else {
+            setError("Artwork not found");
+            toast({
+              title: "Error",
+              description: "Artwork not found",
+              variant: "destructive",
+            });
+            setArtwork(null);
+          }
         } else {
           console.log('Artwork found:', response.artwork);
           setArtwork(response.artwork);
@@ -68,6 +75,12 @@ const ArtistEditArtwork = () => {
     
     try {
       console.log('Updating artwork with data:', data);
+      // Ensure image URL is properly formatted for the API
+      if (data.imageUrl && !data.imageUrl.startsWith('data:') && !data.imageUrl.startsWith('/static/') && !data.imageUrl.startsWith('http')) {
+        console.log('Converting image URL to proper format');
+        data.imageUrl = `/static/uploads/${data.imageUrl}`;
+      }
+      
       const response = await updateArtwork(id, data);
       
       if (response.error) {
@@ -121,7 +134,11 @@ const ArtistEditArtwork = () => {
         
         {artwork ? (
           <ArtworkForm
-            initialData={artwork}
+            initialData={{
+              ...artwork,
+              // Ensure imageUrl format consistency (handle both image_url and imageUrl fields)
+              imageUrl: artwork.image_url || artwork.imageUrl
+            }}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
           />
