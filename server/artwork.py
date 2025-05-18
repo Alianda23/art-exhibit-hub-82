@@ -20,7 +20,6 @@ ensure_uploads_directory()
 # Function to handle image storage
 def save_image_from_base64(base64_str, name_prefix="artwork"):
     """Save a base64 image to the uploads directory and return the path"""
-    # ... keep existing code (base64 image handling)
     if not base64_str:
         return None
         
@@ -67,7 +66,6 @@ def save_image_from_base64(base64_str, name_prefix="artwork"):
         return None
 
 def get_all_artworks():
-    # ... keep existing code (fetch all artworks)
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
@@ -120,7 +118,6 @@ def get_all_artworks():
             connection.close()
 
 def update_artwork_image(artwork_id, image_path):
-    # ... keep existing code (update artwork image)
     connection = get_db_connection()
     if connection is None:
         return False
@@ -145,7 +142,6 @@ def update_artwork_image(artwork_id, image_path):
             connection.close()
 
 def get_artwork(artwork_id):
-    # ... keep existing code (get specific artwork)
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
@@ -303,18 +299,24 @@ def create_artwork(auth_header, artwork_data):
             connection.close()
 
 def update_artwork(auth_header, artwork_id, artwork_data):
-    """Update an existing artwork (admin only)"""
-    # ... keep existing code (update artwork)
+    """Update an existing artwork (admin or artist who owns it)"""
     if not auth_header:
         return {"error": "Authentication required"}
     
     # Extract token from header
-    token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else None
+    token = None
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+    else:
+        parts = auth_header.split(" ")
+        if len(parts) > 1:
+            token = parts[1]
+    
     if not token:
         return {"error": "Invalid authentication token"}
     
     # Debug token verification
-    print(f"Verifying token for update_artwork: {token}")
+    print(f"Verifying token for update_artwork: {token[:20]}...")
     
     # Verify token and check if user is admin
     payload = verify_token(token)
@@ -324,11 +326,10 @@ def update_artwork(auth_header, artwork_id, artwork_data):
     if isinstance(payload, dict) and "error" in payload:
         return {"error": f"Token verification failed: {payload['error']}"}
     
-    # Check if user is admin
-    is_admin = payload.get("is_admin")
-    if not is_admin:
-        print("Access denied: Not an admin user")
-        return {"error": "Unauthorized access: Not an admin"}
+    # Check if user is admin or artist
+    is_admin = payload.get("is_admin", False)
+    is_artist = payload.get("is_artist", False)
+    artist_id = payload.get("sub") if is_artist else None
     
     connection = get_db_connection()
     if connection is None:
@@ -337,6 +338,16 @@ def update_artwork(auth_header, artwork_id, artwork_data):
     cursor = connection.cursor()
     
     try:
+        # First check if artist is the owner (or admin)
+        if is_artist and not is_admin:
+            check_query = "SELECT artist_id FROM artworks WHERE id = %s"
+            cursor.execute(check_query, (artwork_id,))
+            result = cursor.fetchone()
+            if not result or str(result[0]) != str(artist_id):
+                return {"error": "Unauthorized access: You can only edit your own artworks"}
+        elif not is_admin:  # Not artist and not admin
+            return {"error": "Unauthorized access: Not authorized"}
+            
         # Handle the image - convert base64 to file if needed
         image_url = artwork_data.get("imageUrl")
         if image_url and (image_url.startswith('data:') or image_url.startswith('base64,')):
@@ -390,20 +401,26 @@ def update_artwork(auth_header, artwork_id, artwork_data):
             connection.close()
 
 def delete_artwork(auth_header, artwork_id):
-    """Delete an artwork (admin only)"""
-    # ... keep existing code (delete artwork)
+    """Delete an artwork (admin or artist who owns it)"""
     if not auth_header:
         return {"error": "Authentication required"}
     
     # Extract token from header
-    token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else None
+    token = None
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+    else:
+        parts = auth_header.split(" ")
+        if len(parts) > 1:
+            token = parts[1]
+    
     if not token:
         return {"error": "Invalid authentication token"}
     
     # Debug token verification
-    print(f"Verifying token for delete_artwork: {token}")
+    print(f"Verifying token for delete_artwork: {token[:20]}...")
     
-    # Verify token and check if user is admin
+    # Verify token and check if user is admin or artist
     payload = verify_token(token)
     print(f"Token verification result: {payload}")
     
@@ -411,11 +428,10 @@ def delete_artwork(auth_header, artwork_id):
     if isinstance(payload, dict) and "error" in payload:
         return {"error": f"Token verification failed: {payload['error']}"}
     
-    # Check if user is admin
-    is_admin = payload.get("is_admin")
-    if not is_admin:
-        print("Access denied: Not an admin user")
-        return {"error": "Unauthorized access: Not an admin"}
+    # Check if user is admin or artist
+    is_admin = payload.get("is_admin", False)
+    is_artist = payload.get("is_artist", False)
+    artist_id = payload.get("sub") if is_artist else None
     
     connection = get_db_connection()
     if connection is None:
@@ -424,6 +440,14 @@ def delete_artwork(auth_header, artwork_id):
     cursor = connection.cursor()
     
     try:
+        # First check if artist is the owner (or admin)
+        if is_artist and not is_admin:
+            check_query = "SELECT artist_id FROM artworks WHERE id = %s"
+            cursor.execute(check_query, (artwork_id,))
+            result = cursor.fetchone()
+            if not result or str(result[0]) != str(artist_id):
+                return {"error": "Unauthorized access: You can only delete your own artworks"}
+                
         query = "DELETE FROM artworks WHERE id = %s"
         cursor.execute(query, (artwork_id,))
         connection.commit()

@@ -22,6 +22,7 @@ import {
 const ArtistArtworks = () => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [artworkToDelete, setArtworkToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -47,7 +48,9 @@ const ArtistArtworks = () => {
         const processedArtworks = (response.artworks || []).map((artwork: any) => ({
           ...artwork,
           // Ensure consistent image URL field (handle both image_url and imageUrl)
-          imageUrl: artwork.image_url || artwork.imageUrl || null
+          imageUrl: artwork.image_url || artwork.imageUrl || null,
+          // Ensure ID is always a string
+          id: artwork.id.toString()
         }));
         
         console.log('Processed artworks:', processedArtworks);
@@ -82,7 +85,9 @@ const ArtistArtworks = () => {
   const handleDeleteConfirm = async () => {
     if (!artworkToDelete) return;
     
+    setDeleteLoading(true);
     try {
+      console.log('Deleting artwork:', artworkToDelete);
       const response = await deleteArtwork(artworkToDelete);
       
       if (response.error) {
@@ -99,15 +104,16 @@ const ArtistArtworks = () => {
         });
         fetchArtworks();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete artwork:', error);
       toast({
         title: "Error",
-        description: "Failed to delete artwork. Please try again.",
+        description: error.message || "Failed to delete artwork. Please try again.",
         variant: "destructive",
       });
     } finally {
       setArtworkToDelete(null);
+      setDeleteLoading(false);
     }
   };
 
@@ -167,8 +173,17 @@ const ArtistArtworks = () => {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteConfirm}>Delete</AlertDialogAction>
+              <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteLoading}>
+                {deleteLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArtworkData } from "@/services/api";
-import { ImageUp } from "lucide-react";
+import { ImageUp, Loader2 } from "lucide-react";
 
 const MAX_FILE_SIZE = 5000000; // 5MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -38,16 +38,18 @@ interface ArtworkFormProps {
   initialData?: ArtworkData;
   onSubmit: (data: ArtworkData) => void;
   onCancel: () => void;
+  isSubmitting?: boolean;
 }
 
 const ArtworkForm: React.FC<ArtworkFormProps> = ({
   initialData,
   onSubmit,
   onCancel,
+  isSubmitting = false,
 }) => {
   const { toast } = useToast();
   const [previewImage, setPreviewImage] = useState<string | null>(
-    initialData?.imageUrl && initialData.imageUrl.startsWith("http") ? initialData.imageUrl : null
+    initialData?.imageUrl || null
   );
   const [imageFile, setImageFile] = useState<File | null>(null);
   
@@ -61,6 +63,9 @@ const ArtworkForm: React.FC<ArtworkFormProps> = ({
     year: new Date().getFullYear(),
     status: "available" as const,
   };
+
+  console.log("Initial artwork data:", initialData);
+  console.log("Preview image:", previewImage);
 
   const form = useForm<ArtworkFormValues>({
     resolver: zodResolver(artworkSchema),
@@ -114,7 +119,7 @@ const ArtworkForm: React.FC<ArtworkFormProps> = ({
         imageUrl = previewImage || "";
       }
       
-      if (!imageUrl && !imageFile) {
+      if (!imageUrl && !imageFile && !initialData?.imageUrl) {
         toast({
           variant: "destructive",
           title: "Image Required",
@@ -298,11 +303,18 @@ const ArtworkForm: React.FC<ArtworkFormProps> = ({
         />
         
         <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit">
-            {initialData ? "Update Artwork" : "Create Artwork"}
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {initialData ? "Updating..." : "Creating..."}
+              </>
+            ) : (
+              initialData ? "Update Artwork" : "Create Artwork"
+            )}
           </Button>
         </div>
       </form>

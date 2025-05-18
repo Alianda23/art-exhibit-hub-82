@@ -13,6 +13,7 @@ const ArtistEditArtwork = () => {
   const { toast } = useToast();
   const [artwork, setArtwork] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,7 +22,9 @@ const ArtistEditArtwork = () => {
       
       try {
         console.log('Fetching artwork with ID:', id);
+        setLoading(true);
         const response = await getArtwork(id);
+        console.log('Artwork response:', response);
         
         if (response.error) {
           console.error('Error response:', response.error);
@@ -32,30 +35,28 @@ const ArtistEditArtwork = () => {
             variant: "destructive",
           });
           setArtwork(null);
-        } else if (!response.artwork) {
-          console.error('No artwork found, checking if response is the artwork itself');
-          // Sometimes the response directly contains the artwork
-          if (response.id && response.title) {
-            console.log('Response is the artwork:', response);
-            setArtwork(response);
-            setError(null);
-          } else {
-            setError("Artwork not found");
-            toast({
-              title: "Error",
-              description: "Artwork not found",
-              variant: "destructive",
-            });
-            setArtwork(null);
-          }
+        } else if (!response.id) {
+          console.error('No artwork found with ID:', id);
+          setError("Artwork not found");
+          toast({
+            title: "Error",
+            description: "Artwork not found",
+            variant: "destructive",
+          });
+          setArtwork(null);
         } else {
-          console.log('Artwork found:', response.artwork);
-          setArtwork(response.artwork);
+          console.log('Artwork found:', response);
+          // Process the artwork data to ensure consistency
+          const processedArtwork = {
+            ...response,
+            imageUrl: response.image_url || response.imageUrl || null
+          };
+          setArtwork(processedArtwork);
           setError(null);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching artwork:', error);
-        setError('Failed to fetch artwork details');
+        setError(error.message || 'Failed to fetch artwork details');
         toast({
           title: "Error",
           description: "Failed to fetch artwork details. Please try again.",
@@ -68,12 +69,13 @@ const ArtistEditArtwork = () => {
     };
 
     fetchArtwork();
-  }, [id, navigate, toast]);
+  }, [id, toast]);
 
   const handleSubmit = async (data: any) => {
     if (!id) return;
     
     try {
+      setSubmitting(true);
       console.log('Updating artwork with data:', data);
       // Ensure image URL is properly formatted for the API
       if (data.imageUrl && !data.imageUrl.startsWith('data:') && !data.imageUrl.startsWith('/static/') && !data.imageUrl.startsWith('http')) {
@@ -97,13 +99,15 @@ const ArtistEditArtwork = () => {
         });
         navigate('/artist/artworks');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating artwork:', error);
       toast({
         title: "Error",
-        description: "Failed to update artwork. Please try again.",
+        description: error.message || "Failed to update artwork. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -134,13 +138,10 @@ const ArtistEditArtwork = () => {
         
         {artwork ? (
           <ArtworkForm
-            initialData={{
-              ...artwork,
-              // Ensure imageUrl format consistency (handle both image_url and imageUrl fields)
-              imageUrl: artwork.image_url || artwork.imageUrl
-            }}
+            initialData={artwork}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
+            isSubmitting={submitting}
           />
         ) : (
           <div className="text-center p-8">

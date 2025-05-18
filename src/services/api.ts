@@ -1,4 +1,3 @@
-
 // API service to connect to the Python backend
 
 // Base URL for the API
@@ -360,15 +359,7 @@ export const authFetch = async (url: string, options: RequestInit = {}): Promise
     // Handle different status codes
     if (response.status === 401) {
       // Token expired or invalid
-      // Add detailed logging for admin authentication issues
       console.error('401 Unauthorized error - Token invalid or expired', data);
-      if (isAdmin()) {
-        console.error('Admin authentication failed - consider logging in again');
-      }
-      if (isArtist()) {
-        console.error('Artist authentication failed - consider logging in again');
-      }
-      logout();
       throw new Error('Session expired. Please login again.');
     }
     
