@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
-import { ExhibitionDetails } from '@/components/ExhibitionDetails';
+import ExhibitionDetails from '@/components/ExhibitionDetails';
 import { formatPrice } from '@/utils/formatters';
 import { ShoppingCart, Check } from 'lucide-react';
 import { Exhibition } from '@/types';
