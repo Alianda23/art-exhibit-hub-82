@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Loader2, Building } from "lucide-react";
 
 const Signup = () => {
   const [name, setName] = useState("");
@@ -87,7 +87,7 @@ const Signup = () => {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-serif text-center">Create an Account</CardTitle>
           <CardDescription className="text-center">
-            Enter your details to create your account
+            Enter your details to create your personal account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -164,12 +164,22 @@ const Signup = () => {
             </Button>
           </form>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="flex flex-col space-y-2">
           <div className="text-center text-sm w-full">
             Already have an account?{" "}
             <Link to="/login" className="text-gold hover:underline">
               Sign in
             </Link>
+          </div>
+          <div className="text-center text-sm w-full border-t border-gray-200 pt-4 mt-2">
+            <Button 
+              variant="outline" 
+              className="w-full flex items-center justify-center" 
+              onClick={() => navigate('/corporate-signup')}
+            >
+              <Building className="mr-2 h-4 w-4" />
+              Register as a Business
+            </Button>
           </div>
         </CardFooter>
       </Card>

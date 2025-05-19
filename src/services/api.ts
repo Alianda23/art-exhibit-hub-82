@@ -166,6 +166,52 @@ export const registerArtist = async (artistData: RegisterData): Promise<AuthResp
   }
 };
 
+// Register a new corporate user
+export const registerCorporateUser = async (userData: {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  company_name: string;
+  business_type: string;
+  tax_id?: string;
+}) => {
+  try {
+    const response = await fetch(`${API_URL}/register-corporate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(userData),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      // Save token and user info to localStorage
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("userId", data.user_id);
+      localStorage.setItem("userName", data.name);
+      localStorage.setItem("isAdmin", "false");
+      localStorage.setItem("isCorporate", "true");
+      localStorage.setItem("companyName", userData.company_name);
+      localStorage.setItem("businessType", userData.business_type);
+      if (userData.tax_id) {
+        localStorage.setItem("taxId", userData.tax_id);
+      }
+
+      console.log("Corporate user registered successfully:", data);
+    } else {
+      console.error("Error registering corporate user:", data);
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error registering corporate user:", error);
+    throw error;
+  }
+};
+
 // Login a user
 export const loginUser = async (credentials: LoginData): Promise<AuthResponse> => {
   try {

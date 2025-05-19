@@ -4,7 +4,8 @@ import { User } from "@/types";
 import { 
   loginUser, 
   loginAdmin, 
-  registerUser, 
+  registerUser,
+  registerCorporateUser,
   logout as apiLogout, 
   isAuthenticated as checkIsAuthenticated,
   isAdmin as checkIsAdmin
@@ -15,6 +16,15 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<boolean>;
   adminLogin: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string, phone: string) => Promise<boolean>;
+  signupCorporate: (
+    name: string, 
+    email: string, 
+    password: string, 
+    phone: string, 
+    companyName: string, 
+    businessType: string, 
+    taxId?: string
+  ) => Promise<boolean>;
   logout: () => void;
   isAdmin: boolean;
   isAuthenticated: boolean;
@@ -25,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => false,
   adminLogin: async () => false,
   signup: async () => false,
+  signupCorporate: async () => false,
   logout: () => {},
   isAdmin: false,
   isAuthenticated: false,
@@ -46,11 +57,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const userName = localStorage.getItem('userName') || '';
           const userId = localStorage.getItem('userId') || localStorage.getItem('adminId') || '';
           const userIsAdmin = localStorage.getItem('isAdmin') === 'true';
+          const userIsCorporate = localStorage.getItem('isCorporate') === 'true';
+          const companyName = localStorage.getItem('companyName') || '';
+          const businessType = localStorage.getItem('businessType') || '';
+          const taxId = localStorage.getItem('taxId') || '';
           
           console.log("Auth check:", { 
             userName, 
             userId, 
             isAdmin: userIsAdmin,
+            isCorporate: userIsCorporate,
             token: localStorage.getItem('token')?.substring(0, 20) + '...',
             localStorageIsAdmin: localStorage.getItem('isAdmin')
           });
@@ -61,6 +77,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             name: userName,
             email: '',  // We don't store sensitive info in localStorage
             isAdmin: userIsAdmin,
+            isCorporate: userIsCorporate,
+            companyName: companyName || undefined,
+            businessType: businessType || undefined,
+            taxId: taxId || undefined
           });
           
           setIsAdmin(userIsAdmin);
@@ -99,11 +119,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         name: response.name || '',
         email: email,
         isAdmin: false,
+        isCorporate: response.is_corporate === true,
+        companyName: response.company_name || undefined,
+        businessType: response.business_type || undefined,
+        taxId: response.tax_id || undefined
       });
       
       setIsAdmin(false);
       setIsAuthenticated(true);
-      console.log('AuthContext: Login successful', { name: response.name, isAdmin: false });
+      console.log('AuthContext: Login successful', { 
+        name: response.name, 
+        isAdmin: false, 
+        isCorporate: response.is_corporate === true 
+      });
       return true;
     } catch (error) {
       console.error("Login error:", error);
@@ -161,6 +189,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         name: name,
         email: email,
         isAdmin: false,
+        isCorporate: false
       });
       
       setIsAdmin(false);
@@ -169,6 +198,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return true;
     } catch (error) {
       console.error("Signup error:", error);
+      throw error; // Rethrow to handle in component
+    }
+  };
+
+  // Corporate user signup
+  const signupCorporate = async (
+    name: string, 
+    email: string, 
+    password: string, 
+    phone: string,
+    companyName: string,
+    businessType: string,
+    taxId?: string
+  ): Promise<boolean> => {
+    try {
+      console.log('AuthContext: Attempting corporate signup', { name, email, companyName });
+      const response = await registerCorporateUser({ 
+        name, 
+        email, 
+        password, 
+        phone, 
+        company_name: companyName,
+        business_type: businessType,
+        tax_id: taxId || ''
+      });
+      
+      if (response.error) {
+        console.log('AuthContext: Corporate signup failed', response.error);
+        return false;
+      }
+      
+      // Set user state after successful registration
+      setCurrentUser({
+        id: response.user_id?.toString() || '',
+        name: name,
+        email: email,
+        isAdmin: false,
+        isCorporate: true,
+        companyName,
+        businessType,
+        taxId
+      });
+      
+      setIsAdmin(false);
+      setIsAuthenticated(true);
+      console.log('AuthContext: Corporate signup successful');
+      return true;
+    } catch (error) {
+      console.error("Corporate signup error:", error);
       throw error; // Rethrow to handle in component
     }
   };
@@ -187,6 +265,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     login,
     adminLogin,
     signup,
+    signupCorporate,
     logout,
     isAdmin,
     isAuthenticated: isUserAuthenticated,
