@@ -1,3 +1,4 @@
+
 // API service to connect to the Python backend
 
 // Base URL for the API
@@ -9,6 +10,7 @@ interface AuthResponse {
   user_id?: number;
   admin_id?: number;
   artist_id?: number;
+  corporate_user_id?: number;
   name?: string;
   error?: string;
 }
@@ -26,6 +28,16 @@ interface RegisterData {
   password: string;
   phone: string;
   bio?: string; // Optional for artist registration
+}
+
+// Interface for corporate registration data
+interface CorporateRegisterData extends RegisterData {
+  companyName: string;
+  registrationNumber?: string;
+  taxId?: string;
+  billingAddress: string;
+  contactPerson: string;
+  contactPosition?: string;
 }
 
 // Interface for artwork data
@@ -80,20 +92,23 @@ export interface ArtistData {
 }
 
 // Helper function to store auth data
-const storeAuthData = (data: AuthResponse, isAdmin: boolean, isArtist: boolean = false) => {
+const storeAuthData = (data: AuthResponse, isAdmin: boolean, isArtist: boolean = false, isCorporate: boolean = false) => {
   if (data.token) {
     localStorage.setItem('token', data.token);
     localStorage.setItem('userName', data.name || '');
     localStorage.setItem('isAdmin', isAdmin ? 'true' : 'false');
     localStorage.setItem('isArtist', isArtist ? 'true' : 'false');
+    localStorage.setItem('isCorporate', isCorporate ? 'true' : 'false');
     
-    // Store user, admin, or artist ID
+    // Store user, admin, artist, or corporate ID
     if (data.user_id) {
       localStorage.setItem('userId', data.user_id.toString());
     } else if (data.admin_id) {
       localStorage.setItem('adminId', data.admin_id.toString());
     } else if (data.artist_id) {
       localStorage.setItem('artistId', data.artist_id.toString());
+    } else if (data.corporate_user_id) {
+      localStorage.setItem('corporateUserId', data.corporate_user_id.toString());
     }
     
     return true;
@@ -127,6 +142,52 @@ export const registerUser = async (userData: RegisterData): Promise<AuthResponse
     return data;
   } catch (error) {
     console.error('Registration error:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { error: 'Connection timeout. Server may be down or unreachable.' };
+    }
+    return { error: 'Network error. Please try again.' };
+  }
+};
+
+// Register a new corporate user
+export const registerCorporateUser = async (corporateData: CorporateRegisterData): Promise<AuthResponse> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    // Convert frontend naming to backend naming convention
+    const backendData = {
+      name: corporateData.name,
+      email: corporateData.email,
+      password: corporateData.password,
+      phone: corporateData.phone,
+      company_name: corporateData.companyName,
+      registration_number: corporateData.registrationNumber,
+      tax_id: corporateData.taxId,
+      billing_address: corporateData.billingAddress,
+      contact_person: corporateData.contactPerson,
+      contact_position: corporateData.contactPosition
+    };
+
+    const response = await fetch(`${API_URL}/register-corporate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(backendData),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    const data = await response.json();
+    
+    if (response.ok) {
+      storeAuthData(data, false, false, true);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Corporate registration error:', error);
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { error: 'Connection timeout. Server may be down or unreachable.' };
     }
@@ -191,6 +252,38 @@ export const loginUser = async (credentials: LoginData): Promise<AuthResponse> =
     return data;
   } catch (error) {
     console.error('Login error:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { error: 'Connection timeout. Server may be down or unreachable.' };
+    }
+    return { error: 'Network error. Please try again.' };
+  }
+};
+
+// Login as corporate user
+export const loginCorporateUser = async (credentials: LoginData): Promise<AuthResponse> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(`${API_URL}/corporate-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    const data = await response.json();
+    
+    if (response.ok) {
+      storeAuthData(data, false, false, true);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Corporate login error:', error);
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { error: 'Connection timeout. Server may be down or unreachable.' };
     }
@@ -288,9 +381,19 @@ export const isArtist = (): boolean => {
   return localStorage.getItem('isArtist') === 'true';
 };
 
+// Check if user is a corporate user
+export const isCorporate = (): boolean => {
+  return localStorage.getItem('isCorporate') === 'true';
+};
+
 // Get artist ID
 export const getArtistId = (): string | null => {
   return localStorage.getItem('artistId');
+};
+
+// Get corporate user ID
+export const getCorporateUserId = (): string | null => {
+  return localStorage.getItem('corporateUserId');
 };
 
 // Logout user
@@ -299,9 +402,11 @@ export const logout = (): void => {
   localStorage.removeItem('userName');
   localStorage.removeItem('isAdmin');
   localStorage.removeItem('isArtist');
+  localStorage.removeItem('isCorporate');
   localStorage.removeItem('userId');
   localStorage.removeItem('adminId');
   localStorage.removeItem('artistId');
+  localStorage.removeItem('corporateUserId');
 };
 
 // API request with authentication

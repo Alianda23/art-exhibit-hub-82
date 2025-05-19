@@ -54,6 +54,55 @@ def register_user(name, email, password, phone):
             cursor.close()
             connection.close()
 
+def register_corporate_user(name, email, password, phone, company_name, registration_number, tax_id, 
+                           billing_address, contact_person, contact_position):
+    """Register a new corporate user"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    hashed_password = hash_password(password)
+    
+    try:
+        # Check if email already exists
+        cursor.execute("SELECT id FROM corporate_users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            return {"error": "Email already registered"}
+        
+        # Insert the new corporate user
+        query = """
+        INSERT INTO corporate_users (
+            name, email, password, phone, company_name, registration_number, 
+            tax_id, billing_address, contact_person, contact_position, allow_invoicing
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (
+            name, email, hashed_password, phone, company_name, registration_number,
+            tax_id, billing_address, contact_person, contact_position, True
+        ))
+        connection.commit()
+        
+        # Get the new corporate user ID
+        corporate_user_id = cursor.lastrowid
+        
+        # Generate token for the new corporate user
+        token = generate_token(corporate_user_id, name, False, False, True)
+        
+        return {
+            "token": token,
+            "corporate_user_id": corporate_user_id,
+            "name": name
+        }
+    except Exception as e:
+        print(f"Error registering corporate user: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
 def register_artist(name, email, password, phone, bio=""):
     """Register a new artist"""
     connection = get_db_connection()
@@ -125,6 +174,41 @@ def login_user(email, password):
         }
     except Exception as e:
         print(f"Error logging in user: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def login_corporate_user(email, password):
+    """Login a corporate user"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    hashed_password = hash_password(password)
+    
+    try:
+        # Check corporate user credentials
+        query = "SELECT id, name FROM corporate_users WHERE email = %s AND password = %s"
+        cursor.execute(query, (email, hashed_password))
+        corporate_user = cursor.fetchone()
+        
+        if not corporate_user:
+            return {"error": "Invalid credentials"}
+        
+        # Generate token for the corporate user
+        corporate_user_id, name = corporate_user
+        token = generate_token(corporate_user_id, name, False, False, True)
+        
+        return {
+            "token": token,
+            "corporate_user_id": corporate_user_id,
+            "name": name
+        }
+    except Exception as e:
+        print(f"Error logging in corporate user: {e}")
         return {"error": str(e)}
     finally:
         if connection.is_connected():
@@ -203,13 +287,14 @@ def login_admin(email, password):
             cursor.close()
             connection.close()
 
-def generate_token(user_id, name, is_admin, is_artist=False):
+def generate_token(user_id, name, is_admin, is_artist=False, is_corporate=False):
     """Generate a JWT token for authentication"""
     payload = {
         "sub": str(user_id),  # Ensure user_id is converted to string
         "name": name,
         "is_admin": is_admin,
         "is_artist": is_artist,
+        "is_corporate": is_corporate,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
     }
     

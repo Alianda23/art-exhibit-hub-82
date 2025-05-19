@@ -7,6 +7,22 @@ export interface User {
   isAdmin: boolean;
 }
 
+export interface CorporateUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  companyName: string;
+  registrationNumber?: string;
+  taxId?: string;
+  billingAddress: string;
+  contactPerson: string;
+  contactPersonPosition?: string;
+  allowInvoicing: boolean;
+  creditLimit?: number;
+  discountRate?: number;
+}
+
 export interface Artwork {
   id: string;
   title: string;
