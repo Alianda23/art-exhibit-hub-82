@@ -31,6 +31,23 @@ def check_password(password, hashed_password):
     hashed_bytes = hashed_password.encode('utf-8')
     return bcrypt.checkpw(password_bytes, hashed_bytes)
 
+def verify_token(token):
+    """Verify a JWT token"""
+    try:
+        print(f"Verifying token: {token[:20]}...")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        print(f"Token decoded successfully: {payload}")
+        return payload
+    except jwt.ExpiredSignatureError:
+        print("Token verification failed: Token expired")
+        return {"error": "Token expired"}
+    except jwt.InvalidTokenError as e:
+        print(f"Token verification failed: Invalid token - {str(e)}")
+        return {"error": f"Invalid token: {str(e)}"}
+    except Exception as e:
+        print(f"Unexpected error during token verification: {str(e)}")
+        return {"error": f"Token verification error: {str(e)}"}
+
 def generate_token(user_id, name, is_admin=False, is_artist=False, is_corporate=False):
     """Generate a JWT token for authentication"""
     payload = {
