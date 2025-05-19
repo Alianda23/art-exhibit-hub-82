@@ -6,10 +6,6 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
-    is_corporate BOOLEAN DEFAULT FALSE,
-    company_name VARCHAR(255),
-    business_type VARCHAR(255),
-    tax_id VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -80,8 +76,6 @@ CREATE TABLE IF NOT EXISTS artwork_orders (
     payment_status ENUM('pending', 'completed', 'failed') NOT NULL DEFAULT 'pending',
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     total_amount DECIMAL(10, 2) NOT NULL,
-    is_bulk_order BOOLEAN DEFAULT FALSE,
-    invoice_number VARCHAR(50),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (artwork_id) REFERENCES artworks(id)
 );
@@ -103,32 +97,6 @@ CREATE TABLE IF NOT EXISTS exhibition_bookings (
     total_amount DECIMAL(10, 2) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (exhibition_id) REFERENCES exhibitions(id)
-);
-
--- Corporate Bulk Order Requests
-CREATE TABLE IF NOT EXISTS bulk_order_requests (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    artwork_type VARCHAR(255),
-    quantity INT,
-    budget_range VARCHAR(100),
-    special_requirements TEXT,
-    status ENUM('pending', 'processing', 'approved', 'completed', 'rejected') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Invoices table for corporate users
-CREATE TABLE IF NOT EXISTS invoices (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    invoice_number VARCHAR(50) NOT NULL UNIQUE,
-    amount DECIMAL(10, 2) NOT NULL,
-    description TEXT,
-    due_date DATE,
-    status ENUM('pending', 'paid', 'overdue', 'cancelled') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Legacy tables (kept for backward compatibility)

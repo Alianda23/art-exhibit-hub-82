@@ -5,10 +5,6 @@ export interface User {
   email: string;
   phone?: string;
   isAdmin: boolean;
-  isCorporate?: boolean;
-  companyName?: string;
-  businessType?: string;
-  taxId?: string;
 }
 
 export interface Artwork {

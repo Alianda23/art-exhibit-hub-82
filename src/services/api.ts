@@ -1,4 +1,3 @@
-
 // API service to connect to the Python backend
 
 // Base URL for the API
@@ -12,10 +11,6 @@ interface AuthResponse {
   artist_id?: number;
   name?: string;
   error?: string;
-  is_corporate?: boolean;
-  company_name?: string;
-  business_type?: string;
-  tax_id?: string;
 }
 
 // Interface for login data
@@ -91,17 +86,6 @@ const storeAuthData = (data: AuthResponse, isAdmin: boolean, isArtist: boolean =
     localStorage.setItem('userName', data.name || '');
     localStorage.setItem('isAdmin', isAdmin ? 'true' : 'false');
     localStorage.setItem('isArtist', isArtist ? 'true' : 'false');
-    localStorage.setItem('isCorporate', data.is_corporate === true ? 'true' : 'false');
-    
-    if (data.company_name) {
-      localStorage.setItem('companyName', data.company_name);
-    }
-    if (data.business_type) {
-      localStorage.setItem('businessType', data.business_type);
-    }
-    if (data.tax_id) {
-      localStorage.setItem('taxId', data.tax_id);
-    }
     
     // Store user, admin, or artist ID
     if (data.user_id) {
@@ -175,57 +159,6 @@ export const registerArtist = async (artistData: RegisterData): Promise<AuthResp
     return data;
   } catch (error) {
     console.error('Artist registration error:', error);
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return { error: 'Connection timeout. Server may be down or unreachable.' };
-    }
-    return { error: 'Network error. Please try again.' };
-  }
-};
-
-// Register a new corporate user
-export const registerCorporateUser = async (userData: {
-  name: string;
-  email: string;
-  password: string;
-  phone: string;
-  company_name: string;
-  business_type: string;
-  tax_id?: string;
-}): Promise<AuthResponse> => {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-    const response = await fetch(`${API_URL}/register-corporate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(userData),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    const data = await response.json();
-
-    if (response.ok) {
-      // Save token and user info to localStorage using the common helper function
-      storeAuthData({
-        ...data,
-        is_corporate: true,
-        company_name: userData.company_name,
-        business_type: userData.business_type,
-        tax_id: userData.tax_id
-      }, false);
-
-      console.log("Corporate user registered successfully:", data);
-    } else {
-      console.error("Error registering corporate user:", data);
-    }
-
-    return data;
-  } catch (error) {
-    console.error("Error registering corporate user:", error);
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { error: 'Connection timeout. Server may be down or unreachable.' };
     }

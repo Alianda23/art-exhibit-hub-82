@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import './App.css';
@@ -34,8 +35,6 @@ import ArtistArtworks from './pages/ArtistArtworks';
 import ArtistAddArtwork from './pages/ArtistAddArtwork';
 import ArtistEditArtwork from './pages/ArtistEditArtwork';
 import ArtistOrders from './pages/ArtistOrders';
-import CorporateSignup from './pages/CorporateSignup';
-import CorporateProfile from './pages/CorporateProfile';
 
 function App() {
   return (
@@ -59,27 +58,6 @@ function App() {
         <Route path="/artist/orders" element={<ArtistOrders />} />
         <Route path="/artist-login" element={<ArtistLogin />} />
         <Route path="/artist-signup" element={<ArtistSignup />} />
-        
-        {/* Corporate Routes */}
-        <Route path="/corporate-signup" element={
-          <>
-            <Navbar />
-            <main className="flex-grow">
-              <CorporateSignup />
-            </main>
-            <Footer />
-          </>
-        } />
-        <Route path="/corporate-profile" element={
-          <>
-            <Navbar />
-            <main className="flex-grow">
-              <CorporateProfile />
-            </main>
-            <Footer />
-            <ChatBot />
-          </>
-        } />
         
         {/* Public Routes */}
         <Route path="/" element={

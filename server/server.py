@@ -1,252 +1,447 @@
-
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import json
-from json import dumps as json_dumps
-from urllib.parse import parse_qs, urlparse
 import os
-import time
-from artwork import get_artworks, get_artwork_by_id, add_artwork, update_artwork, delete_artwork
-from exhibition import get_exhibitions, get_exhibition_by_id, add_exhibition, update_exhibition, delete_exhibition
-from auth import login_user, register_user, register_artist, register_corporate_user
-from mpesa import initiate_mpesa_payment, check_mpesa_payment
-from contact import add_message, get_messages
-from middleware import require_auth, load_user_id
+import json
+import http.server
+import socketserver
+import urllib.parse
 import mimetypes
-import cgi
-from db_operations import process_order, process_booking
+from http import HTTPStatus
+from datetime import datetime
+from urllib.parse import parse_qs, urlparse
+from decimal import Decimal
 
-# Define host and port
-HOST = "localhost"
+# Import modules
+from auth import register_user, login_user, login_admin, register_artist, login_artist
+from artwork import get_all_artworks, get_artwork, create_artwork, update_artwork, delete_artwork
+from exhibition import get_all_exhibitions, get_exhibition, create_exhibition, update_exhibition, delete_exhibition
+from contact import create_contact_message, get_messages, update_message, json_dumps
+from db_setup import initialize_database
+from middleware import auth_required, admin_required, extract_auth_token, verify_token
+from mpesa import handle_stk_push_request, check_transaction_status, handle_mpesa_callback
+from db_operations import get_all_tickets, get_all_orders, get_artist_artworks, get_artist_orders, get_all_artists
+from database import get_db_connection  # Add this import
+
+# Define the port
 PORT = 8000
 
-# Define the HTTP request handler
-class ServerHandler(BaseHTTPRequestHandler):
-    def _set_response(self, status_code=200, content_type="application/json"):
-        self.send_response(status_code)
-        self.send_header("Content-type", content_type)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.end_headers()
+# Ensure the static/uploads directory exists
+def ensure_uploads_directory():
+    uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir)
+        print(f"Created directory: {uploads_dir}")
 
+# Call this function to ensure directory exists
+ensure_uploads_directory()
+
+# Create a default exhibition image if it doesn't exist
+def create_default_exhibition_image():
+    default_image_path = os.path.join(os.path.dirname(__file__), "static", "uploads", "default_exhibition.jpg")
+    if not os.path.exists(default_image_path):
+        try:
+            # Create a simple colored rectangle as the default image
+            # This would be better with PIL, but let's use a placeholder approach
+            from shutil import copyfile
+            
+            # Copy a placeholder from public if it exists
+            source_placeholder = os.path.join(os.path.dirname(__file__), "..", "public", "placeholder.svg")
+            if os.path.exists(source_placeholder):
+                copyfile(source_placeholder, default_image_path)
+                print(f"Created default exhibition image from placeholder")
+            else:
+                # Create an empty file as fallback
+                with open(default_image_path, "w") as f:
+                    f.write("Default Exhibition Image Placeholder")
+                print(f"Created empty default exhibition image")
+        except Exception as e:
+            print(f"Failed to create default exhibition image: {e}")
+
+# Call this function to ensure the default exhibition image exists
+create_default_exhibition_image()
+
+# Custom JSON encoder to handle Decimal types
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super(DecimalEncoder, self).default(obj)
+
+# Mock data for tickets (in a real app, this would come from a database)
+# We'll use this for demo purposes
+mock_tickets = [
+    {
+        "id": "ticket-001",
+        "userId": "user-123",
+        "userName": "John Doe",
+        "exhibitionId": "exhibition-1",
+        "exhibitionTitle": "Modern Art Showcase",
+        "bookingDate": "2025-04-20T14:00:00",
+        "ticketCode": "EXHB-001-123",
+        "slots": 2,
+        "status": "active"
+    },
+    {
+        "id": "ticket-002",
+        "userId": "user-456",
+        "userName": "Jane Smith",
+        "exhibitionId": "exhibition-2",
+        "exhibitionTitle": "Classical Paintings",
+        "bookingDate": "2025-04-21T10:30:00",
+        "ticketCode": "EXHB-002-456",
+        "slots": 1,
+        "status": "used"
+    },
+    {
+        "id": "ticket-003",
+        "userId": "user-789",
+        "userName": "Alex Johnson",
+        "exhibitionId": "exhibition-1",
+        "exhibitionTitle": "Modern Art Showcase",
+        "bookingDate": "2025-04-22T16:15:00",
+        "ticketCode": "EXHB-001-789",
+        "slots": 3,
+        "status": "cancelled"
+    }
+]
+
+# Function to get all tickets (mock implementation)
+def get_all_tickets(auth_header):
+    """Get all tickets (admin only)"""
+    print(f"Getting all tickets with auth header: {auth_header[:20]}... (truncated)")
+    
+    # Extract and verify token - directly use the token from auth_header
+    token = extract_auth_token(auth_header)
+    if not token:
+        print("Authentication required - no token found")
+        return {"error": "Authentication required"}
+    
+    payload = verify_token(token)
+    if isinstance(payload, dict) and "error" in payload:
+        print(f"Authentication failed: {payload['error']}")
+        return {"error": payload["error"]}
+    
+    # Check if user is admin
+    if not payload.get("is_admin", False):
+        print("Access denied - not an admin user")
+        return {"error": "Unauthorized access: Admin privileges required"}
+    
+    print(f"Admin user authenticated, returning {len(mock_tickets)} tickets")
+    # Return tickets data
+    return {"tickets": mock_tickets}
+
+# Function to generate exhibition ticket (mock implementation)
+def generate_ticket(booking_id, auth_header):
+    # Extract and verify token
+    token = extract_auth_token(auth_header)
+    if not token:
+        return {"error": "Authentication required"}
+    
+    payload = verify_token(token)
+    if isinstance(payload, dict) and "error" in payload:
+        return {"error": payload["error"]}
+    
+    # In a real application, we would generate a PDF here
+    # For demo purposes, we'll return mock data
+    return {
+        "pdfData": "Mock PDF data for ticket " + booking_id,
+        "success": True
+    }
+
+class RequestHandler(http.server.BaseHTTPRequestHandler):
+    
+    def _set_response(self, status_code=200, content_type='application/json'):
+        self.send_response(status_code)
+        self.send_header('Content-type', content_type)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.end_headers()
+    
     def do_OPTIONS(self):
         self._set_response()
-
+    
+    def serve_static_file(self, file_path):
+        """Serve a static file based on its MIME type"""
+        try:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                self.send_response(404)
+                self.end_headers()
+                return
+                
+            # Determine the content type
+            content_type, _ = mimetypes.guess_type(file_path)
+            if not content_type:
+                content_type = 'application/octet-stream'
+                
+            # Get file size
+            file_size = os.path.getsize(file_path)
+            
+            # Set headers
+            self.send_response(200)
+            self.send_header('Content-type', content_type)
+            self.send_header('Content-Length', str(file_size))
+            self.end_headers()
+            
+            # Read and send the file
+            with open(file_path, 'rb') as f:
+                self.wfile.write(f.read())
+                
+        except Exception as e:
+            print(f"Error serving static file: {e}")
+            self.send_response(500)
+            self.end_headers()
+    
     def do_GET(self):
-        parsed_url = urlparse(self.path)
+        parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         
-        # Serve static files
+        # Handle static files (images, CSS, JS, etc.)
         if path.startswith('/static/'):
-            try:
-                file_path = os.path.join(os.getcwd(), path.lstrip('/'))
-                with open(file_path, 'rb') as file:
-                    self._set_response(200, mimetypes.guess_type(file_path)[0] or 'application/octet-stream')
-                    self.wfile.write(file.read())
-                return
-            except FileNotFoundError:
-                self._set_response(404)
-                self.wfile.write(json_dumps({"error": "File not found"}).encode())
-                return
+            file_path = os.path.join(os.path.dirname(__file__), path[1:])
+            # Debugging info
+            print(f"Serving static file: {file_path}")
+            self.serve_static_file(file_path)
+            return
         
-        # Get artworks
-        if path == "/artworks":
-            artworks = get_artworks()
+        # Handle API endpoints
+        # Handle GET /artworks
+        if path == '/artworks':
+            response = get_all_artworks()
             self._set_response()
-            self.wfile.write(json_dumps({"artworks": artworks}).encode())
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Get artwork by ID
-        elif path.startswith("/artworks/"):
-            artwork_id = path.split("/")[-1]
-            artwork = get_artwork_by_id(artwork_id)
-            if artwork:
-                self._set_response()
-                self.wfile.write(json_dumps({"artwork": artwork}).encode())
-            else:
-                self._set_response(404)
-                self.wfile.write(json_dumps({"error": "Artwork not found"}).encode())
-            return
-            
-        # Get exhibitions
-        elif path == "/exhibitions":
-            exhibitions = get_exhibitions()
+        
+        # Handle GET /artworks/{id}
+        elif path.startswith('/artworks/') and len(path.split('/')) == 3:
+            artwork_id = path.split('/')[2]
+            response = get_artwork(artwork_id)
             self._set_response()
-            self.wfile.write(json_dumps({"exhibitions": exhibitions}).encode())
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Get exhibition by ID
-        elif path.startswith("/exhibitions/"):
-            exhibition_id = path.split("/")[-1]
-            exhibition = get_exhibition_by_id(exhibition_id)
-            if exhibition:
-                self._set_response()
-                self.wfile.write(json_dumps({"exhibition": exhibition}).encode())
-            else:
-                self._set_response(404)
-                self.wfile.write(json_dumps({"error": "Exhibition not found"}).encode())
+        
+        # Handle GET /exhibitions
+        elif path == '/exhibitions':
+            response = get_all_exhibitions()
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
             return
+        
+        # Handle GET /exhibitions/{id}
+        elif path.startswith('/exhibitions/') and len(path.split('/')) == 3:
+            exhibition_id = path.split('/')[2]
+            response = get_exhibition(exhibition_id)
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Handle GET /messages (admin only)
+        elif path == '/messages':
+            print("Processing GET /messages request")
+            auth_header = self.headers.get('Authorization', '')
+            print(f"Authorization header: {auth_header[:20]}... (truncated)")
             
-        # Get contact messages with authentication
-        elif path == "/messages":
-            auth_header = self.headers.get('Authorization')
-            if not auth_header:
+            # Get messages
+            response = get_messages(auth_header)
+            print(f"Get messages response: {response}")
+            
+            if "error" in response:
                 self._set_response(401)
-                self.wfile.write(json_dumps({"error": "Authorization header required"}).encode())
+                self.wfile.write(json_dumps({"error": response["error"]}).encode())
                 return
-                
-            token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else ""
-            auth_result = require_auth(token, True)  # Only admin can access messages
             
-            if "error" in auth_result:
-                self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
-                return
-                
-            messages = get_messages()
             self._set_response()
-            self.wfile.write(json_dumps({"messages": messages}).encode())
+            self.wfile.write(json_dumps(response).encode())
             return
             
-        # Default response for unknown paths
-        else:
-            self._set_response(404)
-            self.wfile.write(json_dumps({"error": "Not found"}).encode())
+        # Handle GET /tickets (admin only)
+        elif path == '/tickets':
+            print("Processing GET /tickets request")
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify admin access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_admin", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Admin access required"}).encode())
+                return
+            
+            # Get tickets from database
+            from db_operations import get_all_tickets
+            response = get_all_tickets()
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Handle GET /orders (admin only)
+        elif path == '/orders':
+            print("Processing GET /orders request")
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify admin access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_admin", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Admin access required"}).encode())
+                return
+            
+            # Get orders from database
+            from db_operations import get_all_orders
+            response = get_all_orders()
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
             return
 
-    def do_POST(self):
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
+        # Handle GET /artists (admin only)
+        elif path == '/artists':
+            print("Processing GET /artists request")
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify admin access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_admin", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Admin access required"}).encode())
+                return
+            
+            # Get artists from database
+            response = get_all_artists()
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # Handle GET /artist/artworks (artist only)
+        elif path == '/artist/artworks':
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify artist access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_artist", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Artist access required"}).encode())
+                return
+            
+            # Get artworks by artist ID
+            artist_id = payload.get("sub")
+            response = get_artist_artworks(artist_id)
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # Handle GET /artist/orders (artist only)
+        elif path == '/artist/orders':
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Verify artist access
+            token = extract_auth_token(auth_header)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if not payload.get("is_artist", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Artist access required"}).encode())
+                return
+            
+            # Get orders for artworks by artist ID
+            artist_id = payload.get("sub")
+            response = get_artist_orders(artist_id)
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # Handle GET /tickets/generate/{id} (generate ticket)
+        elif path.startswith('/tickets/generate/') and len(path.split('/')) == 4:
+            booking_id = path.split('/')[3]
+            print(f"Processing generate ticket request for booking {booking_id}")
+            auth_header = self.headers.get('Authorization', '')
+            
+            # Generate ticket
+            response = generate_ticket(booking_id, auth_header)
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": response["error"]}).encode())
+                return
+            
+            self._set_response()
+            self.wfile.write(json_dumps(response).encode())
+            return
         
+        # Default 404 response
+        self._set_response(404)
+        self.wfile.write(json_dumps({"error": "Resource not found"}).encode())
+    
+    def do_POST(self):
         # Get content length
         content_length = int(self.headers.get('Content-Length', 0))
-        post_data = None
         
-        # Parse form data for file uploads
+        # Get content type
+        content_type = self.headers.get('Content-Type', '')
+        
+        # Debug information
+        print(f"POST to {self.path} with content type: {content_type}, length: {content_length}")
+        
+        # Parse POST data based on content type
+        post_data = {}
+        
         if content_length > 0:
-            if self.headers.get('Content-Type', '').startswith('multipart/form-data'):
-                form = cgi.FieldStorage(
-                    fp=self.rfile,
-                    headers=self.headers,
-                    environ={'REQUEST_METHOD': 'POST'}
-                )
-                post_data = {}
-                for field in form.keys():
-                    if form[field].filename:  # This is a file upload
-                        file_data = form[field].file.read()
-                        file_name = form[field].filename
-                        timestamp = time.strftime("%Y%m%d%H%M%S")
-                        
-                        # Define upload path
-                        upload_dir = "server/static/uploads"
-                        os.makedirs(upload_dir, exist_ok=True)
-                        
-                        # Determine file type (artwork or exhibition)
-                        prefix = "artwork_" if "artwork" in path else "exhibition_"
-                        file_path = f"{upload_dir}/{prefix}{timestamp}{os.path.splitext(file_name)[1]}"
-                        
-                        # Save the file
-                        with open(file_path, 'wb') as f:
-                            f.write(file_data)
-                        
-                        post_data[field] = f"/{file_path.replace('server/', '')}"
-                    else:
-                        post_data[field] = form[field].value
+            if "application/json" in content_type:
+                # Handle JSON data
+                post_data = json.loads(self.rfile.read(content_length).decode('utf-8'))
+                print(f"Parsed JSON data: {post_data}")
+            elif "multipart/form-data" in content_type:
+                # For multipart form data (like file uploads), will be handled in specific endpoints
+                print("Multipart form data detected, will handle in endpoint")
             else:
-                # Parse JSON data
-                post_data = json.loads(self.rfile.read(content_length))
+                # Handle plain form data (url-encoded)
+                form_data = self.rfile.read(content_length).decode('utf-8')
+                post_data = parse_qs(form_data)
+                for key in post_data:
+                    post_data[key] = post_data[key][0]
+                print(f"Parsed form data: {post_data}")
         
-        # Login route
-        if path == '/login':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing login credentials"}).encode())
-                return
-                
-            email = post_data.get('email')
-            password = post_data.get('password')
-            
-            if not email or not password:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Email and password are required"}).encode())
-                return
-                
-            response = login_user(email, password)
-            
-            if "error" in response:
-                self._set_response(401)
-            else:
-                self._set_response(200)
-                
-            self.wfile.write(json_dumps(response).encode())
-            return
-            
-        # Register route
-        elif path == '/register':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
-                return
-                
-            name = post_data.get('name')
-            email = post_data.get('email')
-            password = post_data.get('password')
-            phone = post_data.get('phone', '')
-            
-            if not name or not email or not password:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Name, email, and password are required"}).encode())
-                return
-                
-            response = register_user(name, email, password, phone)
-            
-            if "error" in response:
-                self._set_response(400)
-            else:
-                self._set_response(201)
-                
-            self.wfile.write(json_dumps(response).encode())
-            return
-            
-        # Register artist
-        elif path == '/register-artist':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
-                return
-                
-            name = post_data.get('name')
-            email = post_data.get('email')
-            password = post_data.get('password')
-            phone = post_data.get('phone', '')
-            bio = post_data.get('bio', '')
-            
-            if not name or not email or not password:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Name, email, and password are required"}).encode())
-                return
-                
-            response = register_artist(name, email, password, phone, bio)
-            
-            if "error" in response:
-                self._set_response(400)
-            else:
-                self._set_response(201)
-                
-            self.wfile.write(json_dumps(response).encode())
-            return
+        # Process based on path
+        path = self.path
         
-        # Register corporate user
-        elif path == '/register-corporate':
+        # Register user
+        if path == '/register':
             if not post_data:
                 self._set_response(400)
                 self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
                 return
             
-            print(f"Corporate Registration data: {post_data}")
+            print(f"Registration data: {post_data}")
             
             # Check required fields
-            required_fields = ['name', 'email', 'password', 'company_name', 'business_type']
+            required_fields = ['name', 'email', 'password']
             missing_fields = [field for field in required_fields if field not in post_data]
             
             if missing_fields:
@@ -254,15 +449,12 @@ class ServerHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json_dumps({"error": f"Missing required fields: {', '.join(missing_fields)}"}).encode())
                 return
             
-            # Register the corporate user
-            response = register_corporate_user(
+            # Register the user
+            response = register_user(
                 post_data['name'], 
                 post_data['email'], 
                 post_data['password'],
-                post_data.get('phone', ''),
-                post_data['company_name'],
-                post_data['business_type'],
-                post_data.get('tax_id', '')
+                post_data.get('phone', '')  # Optional field
             )
             
             if "error" in response:
@@ -272,408 +464,520 @@ class ServerHandler(BaseHTTPRequestHandler):
             
             self.wfile.write(json_dumps(response).encode())
             return
+        
+        # Register artist
+        elif path == '/register-artist':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
+                return
             
-        # Add artwork
+            # Check required fields
+            required_fields = ['name', 'email', 'password']
+            missing_fields = [field for field in required_fields if field not in post_data]
+            
+            if missing_fields:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": f"Missing required fields: {', '.join(missing_fields)}"}).encode())
+                return
+            
+            # Register the artist
+            response = register_artist(
+                post_data['name'], 
+                post_data['email'], 
+                post_data['password'],
+                post_data.get('phone', ''),  # Optional field
+                post_data.get('bio', '')     # Optional field
+            )
+            
+            if "error" in response:
+                self._set_response(400)
+            else:
+                self._set_response(201)
+            
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # User login
+        elif path == '/login':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing login data"}).encode())
+                return
+            
+            # Check required fields
+            if 'email' not in post_data or 'password' not in post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Email and password required"}).encode())
+                return
+            
+            # Login the user
+            response = login_user(post_data['email'], post_data['password'])
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Artist login
+        elif path == '/artist-login':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing login data"}).encode())
+                return
+            
+            # Check required fields
+            if 'email' not in post_data or 'password' not in post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Email and password required"}).encode())
+                return
+            
+            # Login the artist
+            response = login_artist(post_data['email'], post_data['password'])
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Admin login - Fixed the endpoint
+        elif path == '/admin-login':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing login data"}).encode())
+                return
+            
+            # Check required fields
+            if 'email' not in post_data or 'password' not in post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Email and password required"}).encode())
+                return
+            
+            # Login as admin
+            response = login_admin(post_data['email'], post_data['password'])
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Create artwork (admin or artist)
         elif path == '/artworks':
-            auth_header = self.headers.get('Authorization')
-            if not auth_header:
-                self._set_response(401)
-                self.wfile.write(json_dumps({"error": "Authorization header required"}).encode())
-                return
-                
-            token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else ""
-            auth_result = require_auth(token)
+            auth_header = self.headers.get('Authorization', '')
+            token = extract_auth_token(auth_header)
             
-            if "error" in auth_result:
+            if not token:
                 self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
                 return
-                
-            user_id = load_user_id(token)
             
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing artwork data"}).encode())
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
                 return
+            
+            # Check if user is admin or artist
+            if not (payload.get("is_admin", False) or payload.get("is_artist", False)):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Unauthorized: Admin or artist privileges required"}).encode())
+                return
+            
+            # Add artist_id to the post_data if the request is from an artist
+            if payload.get("is_artist", False):
+                post_data["artist_id"] = payload.get("sub")
+            
+            # Create artwork
+            response = create_artwork(auth_header, post_data)
+            
+            if "error" in response:
+                error_message = response["error"]
                 
-            # Check required fields
-            required_fields = ['title', 'description', 'price']
-            for field in required_fields:
-                if field not in post_data:
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                else:
                     self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
+                return
             
-            # Add the artwork
-            artwork_data = {
-                'title': post_data['title'],
-                'description': post_data['description'],
-                'price': post_data['price'],
-                'dimensions': post_data.get('dimensions', ''),
-                'medium': post_data.get('medium', ''),
-                'year': post_data.get('year', 2023),
-                'status': 'available',
-                'image_url': post_data.get('image', ''),
-                'artist_id': user_id
-            }
-            
-            result = add_artwork(artwork_data)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(201)
-                self.wfile.write(json_dumps({"message": "Artwork added successfully", "artwork_id": result["artwork_id"]}).encode())
+            self._set_response(201)
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Add exhibition
+        
+        # Create exhibition (admin only)
         elif path == '/exhibitions':
-            auth_header = self.headers.get('Authorization')
-            if not auth_header:
-                self._set_response(401)
-                self.wfile.write(json_dumps({"error": "Authorization header required"}).encode())
-                return
-                
-            token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else ""
-            auth_result = require_auth(token, True)  # Only admin can add exhibitions
+            auth_header = self.headers.get('Authorization', '')
+            response = create_exhibition(auth_header, post_data)
             
-            if "error" in auth_result:
-                self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
-                return
+            if "error" in response:
+                error_message = response["error"]
                 
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing exhibition data"}).encode())
-                return
-                
-            # Check required fields
-            required_fields = ['title', 'description', 'location', 'startDate', 'endDate', 'ticketPrice', 'totalSlots']
-            for field in required_fields:
-                if field not in post_data:
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                else:
                     self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
+                return
             
-            # Add the exhibition
-            exhibition_data = {
-                'title': post_data['title'],
-                'description': post_data['description'],
-                'location': post_data['location'],
-                'start_date': post_data['startDate'],
-                'end_date': post_data['endDate'],
-                'ticket_price': post_data['ticketPrice'],
-                'total_slots': post_data['totalSlots'],
-                'available_slots': post_data['totalSlots'],
-                'status': post_data.get('status', 'upcoming'),
-                'image_url': post_data.get('image', '')
-            }
-            
-            result = add_exhibition(exhibition_data)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(201)
-                self.wfile.write(json_dumps({"message": "Exhibition added successfully", "exhibition_id": result["exhibition_id"]}).encode())
+            self._set_response(201)
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Add contact message
+        
+        # Create contact message
         elif path == '/contact':
-            if not post_data:
+            response = create_contact_message(post_data)
+            
+            if "error" in response:
                 self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing contact data"}).encode())
-                return
-                
-            # Check required fields
-            required_fields = ['name', 'email', 'message']
-            for field in required_fields:
-                if field not in post_data:
-                    self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
-            
-            # Add the message
-            message_data = {
-                'name': post_data['name'],
-                'email': post_data['email'],
-                'phone': post_data.get('phone', ''),
-                'message': post_data['message'],
-                'status': 'new'
-            }
-            
-            result = add_message(message_data)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
             else:
                 self._set_response(201)
-                self.wfile.write(json_dumps({"message": "Message sent successfully"}).encode())
+            
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Process order
-        elif path == '/process-order':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing order data"}).encode())
+        
+        # Update message status (admin only)
+        elif path.startswith('/messages/'):
+            message_id = path.split('/')[2]
+            token = extract_auth_token(self)
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
                 return
-                
-            # Check required fields
-            required_fields = ['userId', 'artworkId', 'name', 'email', 'phone', 'deliveryAddress', 'paymentMethod', 'totalAmount']
-            for field in required_fields:
-                if field not in post_data:
-                    self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
             
-            # Process the order
-            result = process_order(post_data)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(201)
-                self.wfile.write(json_dumps(result).encode())
-            return
-            
-        # Process booking
-        elif path == '/process-booking':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing booking data"}).encode())
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
                 return
-                
-            # Check required fields
-            required_fields = ['userId', 'exhibitionId', 'name', 'email', 'phone', 'slots', 'paymentMethod', 'totalAmount']
-            for field in required_fields:
-                if field not in post_data:
-                    self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
             
-            # Process the booking
-            result = process_booking(post_data)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(201)
-                self.wfile.write(json_dumps(result).encode())
-            return
-            
-        # Initiate M-Pesa payment
-        elif path == '/mpesa/initiate':
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing payment data"}).encode())
+            # Check if user is admin
+            if not payload.get("is_admin", False):
+                self._set_response(403)
+                self.wfile.write(json_dumps({"error": "Unauthorized access: Admin privileges required"}).encode())
                 return
-                
-            # Check required fields
-            required_fields = ['phone', 'amount', 'description']
-            for field in required_fields:
-                if field not in post_data:
-                    self._set_response(400)
-                    self.wfile.write(json_dumps({"error": f"Missing required field: {field}"}).encode())
-                    return
             
-            # Initiate the payment
-            result = initiate_mpesa_payment(post_data['phone'], post_data['amount'], post_data['description'])
+            response = update_message(self.headers.get('Authorization', ''), message_id, post_data)
             
-            if "error" in result:
+            if "error" in response:
                 self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
             else:
                 self._set_response(200)
-                self.wfile.write(json_dumps(result).encode())
-            return
             
-        # Check M-Pesa payment status
-        elif path == '/mpesa/check':
-            if not post_data or 'checkout_request_id' not in post_data:
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # New M-Pesa STK Push endpoint
+        elif path == '/mpesa/stk-push':
+            print("Processing M-Pesa STK Push request")
+            response = handle_stk_push_request(post_data)
+            
+            if "error" in response:
                 self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing checkout_request_id"}).encode())
+                self.wfile.write(json_dumps(response).encode())
                 return
-                
-            # Check the payment status
-            result = check_mpesa_payment(post_data['checkout_request_id'])
             
-            if "error" in result:
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+            
+        # M-Pesa callback endpoint
+        elif path == '/mpesa/callback':
+            print("Processing M-Pesa callback")
+            response = handle_mpesa_callback(post_data)
+            
+            if "error" in response:
                 self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(200)
-                self.wfile.write(json_dumps(result).encode())
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
             return
             
-        # Default response for unknown paths
-        else:
-            self._set_response(404)
-            self.wfile.write(json_dumps({"error": "Not found"}).encode())
+        # M-Pesa transaction status check endpoint
+        elif path.startswith('/mpesa/status/'):
+            checkout_request_id = path.split('/')[3]
+            print(f"Checking M-Pesa transaction status for: {checkout_request_id}")
+            
+            response = check_transaction_status(checkout_request_id)
+            
+            if "error" in response:
+                self._set_response(400)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
             return
-
+        
+        # Default 404 response
+        self._set_response(404)
+        self.wfile.write(json_dumps({"error": "Resource not found"}).encode())
+    
     def do_PUT(self):
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
-        
-        # Check authentication for all PUT requests
-        auth_header = self.headers.get('Authorization')
-        if not auth_header:
-            self._set_response(401)
-            self.wfile.write(json_dumps({"error": "Authorization header required"}).encode())
-            return
-            
-        token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else ""
-        
         # Get content length
         content_length = int(self.headers.get('Content-Length', 0))
-        post_data = None
         
+        # Parse JSON data
+        post_data = {}
         if content_length > 0:
-            # Parse JSON data
-            post_data = json.loads(self.rfile.read(content_length))
+            post_data = json.loads(self.rfile.read(content_length).decode('utf-8'))
         
-        # Update artwork
-        if path.startswith('/artworks/'):
-            artwork_id = path.split("/")[-1]
+        # Process based on path
+        path = self.path
+        
+        # Update artwork (admin or artist)
+        if path.startswith('/artworks/') and len(path.split('/')) == 3:
+            artwork_id = path.split('/')[2]
+            auth_header = self.headers.get('Authorization', '')
             
-            # Only admin or the artist who created the artwork can update it
-            auth_result = require_auth(token)
+            # Extract token and verify
+            token = extract_auth_token(auth_header)
             
-            if "error" in auth_result:
+            if not token:
                 self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
                 return
-                
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing artwork data"}).encode())
-                return
-                
-            # Update the artwork
-            result = update_artwork(artwork_id, post_data)
             
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(200)
-                self.wfile.write(json_dumps({"message": "Artwork updated successfully"}).encode())
-            return
-            
-        # Update exhibition
-        elif path.startswith('/exhibitions/'):
-            exhibition_id = path.split("/")[-1]
-            
-            # Only admin can update exhibitions
-            auth_result = require_auth(token, True)
-            
-            if "error" in auth_result:
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
                 self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
                 return
+            
+            # Check if user is admin or the artist who created the artwork
+            is_admin = payload.get("is_admin", False)
+            is_artist = payload.get("is_artist", False)
+            artist_id = payload.get("sub")
+            
+            if not is_admin and is_artist:
+                # Verify if the artist owns this artwork
+                connection = get_db_connection()
+                if connection is None:
+                    self._set_response(500)
+                    self.wfile.write(json_dumps({"error": "Database connection failed"}).encode())
+                    return
                 
-            if not post_data:
-                self._set_response(400)
-                self.wfile.write(json_dumps({"error": "Missing exhibition data"}).encode())
+                cursor = connection.cursor()
+                try:
+                    # Check both artist_id and artist name for ownership
+                    cursor.execute("""
+                        SELECT a.id FROM artworks a
+                        JOIN artists art ON art.id = %s
+                        WHERE a.id = %s AND (a.artist_id = %s OR a.artist = art.name)
+                    """, (artist_id, artwork_id, artist_id))
+                    
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        self._set_response(403)
+                        self.wfile.write(json_dumps({"error": "Unauthorized: You can only update your own artworks"}).encode())
+                        return
+                finally:
+                    cursor.close()
+                    connection.close()
+            
+            # If admin or verified artist, update artwork
+            response = update_artwork(auth_header, artwork_id, post_data)
+            
+            if "error" in response:
+                error_message = response["error"]
+                
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                elif "not found" in error_message:
+                    self._set_response(404)
+                else:
+                    self._set_response(400)
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
                 return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Update exhibition (admin only)
+        elif path.startswith('/exhibitions/') and len(path.split('/')) == 3:
+            exhibition_id = path.split('/')[2]
+            auth_header = self.headers.get('Authorization', '')
+            
+            response = update_exhibition(auth_header, exhibition_id, post_data)
+            
+            if "error" in response:
+                error_message = response["error"]
                 
-            # Update the exhibition
-            result = update_exhibition(exhibition_id, post_data)
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                elif "not found" in error_message:
+                    self._set_response(404)
+                else:
+                    self._set_response(400)
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
+                return
             
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(200)
-                self.wfile.write(json_dumps({"message": "Exhibition updated successfully"}).encode())
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Default response for unknown paths
-        else:
-            self._set_response(404)
-            self.wfile.write(json_dumps({"error": "Not found"}).encode())
-            return
-
+        
+        # Default 404 response
+        self._set_response(404)
+        self.wfile.write(json_dumps({"error": "Resource not found"}).encode())
+    
     def do_DELETE(self):
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
+        # Process based on path
+        path = self.path
         
-        # Check authentication for all DELETE requests
-        auth_header = self.headers.get('Authorization')
-        if not auth_header:
-            self._set_response(401)
-            self.wfile.write(json_dumps({"error": "Authorization header required"}).encode())
-            return
+        # Delete artwork (admin or artist)
+        if path.startswith('/artworks/') and len(path.split('/')) == 3:
+            artwork_id = path.split('/')[2]
+            auth_header = self.headers.get('Authorization', '')
             
-        token = auth_header.split(" ")[1] if len(auth_header.split(" ")) > 1 else ""
+            # Extract token and verify
+            token = extract_auth_token(auth_header)
+            
+            if not token:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": "Authentication required"}).encode())
+                return
+            
+            payload = verify_token(token)
+            if isinstance(payload, dict) and "error" in payload:
+                self._set_response(401)
+                self.wfile.write(json_dumps({"error": payload["error"]}).encode())
+                return
+            
+            # Check if user is admin or the artist who created the artwork
+            is_admin = payload.get("is_admin", False)
+            is_artist = payload.get("is_artist", False)
+            artist_id = payload.get("sub")
+            
+            if not is_admin and is_artist:
+                # Verify if the artist owns this artwork
+                connection = get_db_connection()
+                if connection is None:
+                    self._set_response(500)
+                    self.wfile.write(json_dumps({"error": "Database connection failed"}).encode())
+                    return
+                
+                cursor = connection.cursor()
+                try:
+                    # Check both artist_id and artist name for ownership
+                    cursor.execute("""
+                        SELECT a.id FROM artworks a
+                        JOIN artists art ON art.id = %s
+                        WHERE a.id = %s AND (a.artist_id = %s OR a.artist = art.name)
+                    """, (artist_id, artwork_id, artist_id))
+                    
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        self._set_response(403)
+                        self.wfile.write(json_dumps({"error": "Unauthorized: You can only delete your own artworks"}).encode())
+                        return
+                finally:
+                    cursor.close()
+                    connection.close()
+            
+            # If admin or verified artist, delete artwork
+            response = delete_artwork(auth_header, artwork_id)
+            
+            if "error" in response:
+                error_message = response["error"]
+                
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                elif "not found" in error_message:
+                    self._set_response(404)
+                else:
+                    self._set_response(400)
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
         
-        # Delete artwork
-        if path.startswith('/artworks/'):
-            artwork_id = path.split("/")[-1]
+        # Delete exhibition (admin only)
+        elif path.startswith('/exhibitions/') and len(path.split('/')) == 3:
+            exhibition_id = path.split('/')[2]
+            auth_header = self.headers.get('Authorization', '')
             
-            # Only admin or the artist who created the artwork can delete it
-            auth_result = require_auth(token)
+            response = delete_exhibition(auth_header, exhibition_id)
             
-            if "error" in auth_result:
-                self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
-                return
+            if "error" in response:
+                error_message = response["error"]
                 
-            # Delete the artwork
-            result = delete_artwork(artwork_id)
-            
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(200)
-                self.wfile.write(json_dumps({"message": "Artwork deleted successfully"}).encode())
-            return
-            
-        # Delete exhibition
-        elif path.startswith('/exhibitions/'):
-            exhibition_id = path.split("/")[-1]
-            
-            # Only admin can delete exhibitions
-            auth_result = require_auth(token, True)
-            
-            if "error" in auth_result:
-                self._set_response(401)
-                self.wfile.write(json_dumps(auth_result).encode())
+                if "Authentication" in error_message or "authorized" in error_message:
+                    self._set_response(401)
+                elif "Admin" in error_message:
+                    self._set_response(403)
+                elif "not found" in error_message:
+                    self._set_response(404)
+                else:
+                    self._set_response(400)
+                    
+                self.wfile.write(json_dumps({"error": error_message}).encode())
                 return
-                
-            # Delete the exhibition
-            result = delete_exhibition(exhibition_id)
             
-            if "error" in result:
-                self._set_response(400)
-                self.wfile.write(json_dumps(result).encode())
-            else:
-                self._set_response(200)
-                self.wfile.write(json_dumps({"message": "Exhibition deleted successfully"}).encode())
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
             return
-            
-        # Default response for unknown paths
-        else:
-            self._set_response(404)
-            self.wfile.write(json_dumps({"error": "Not found"}).encode())
-            return
+        
+        # Default 404 response
+        self._set_response(404)
+        self.wfile.write(json_dumps({"error": "Resource not found"}).encode())
 
-def run(server_class=HTTPServer, handler_class=ServerHandler, port=PORT):
-    server_address = (HOST, port)
-    httpd = server_class(server_address, handler_class)
-    print(f"Starting server on {HOST}:{port}")
+def main():
+    """Start the server"""
+    # Initialize the database
+    print("Initializing database...")
+    initialize_database()
+    
+    # Create uploads directory if it doesn't exist
+    ensure_uploads_directory()
+    
+    # Create default exhibition image
+    create_default_exhibition_image()
+    
+    # Create an HTTP server
+    print(f"Starting server on port {PORT}...")
+    httpd = socketserver.ThreadingTCPServer(("", PORT), RequestHandler)
+    print(f"Server running on port {PORT}")
+    
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        pass
-    httpd.server_close()
-    print("Server stopped")
+        print("\nShutting down server...")
+    finally:
+        httpd.server_close()
+        print("Server closed")
 
 if __name__ == "__main__":
-    run()
+    main()
