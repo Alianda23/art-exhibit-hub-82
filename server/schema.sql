@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
+    user_type ENUM('individual', 'corporate') DEFAULT 'individual',
+    company_name VARCHAR(255),
+    tax_id VARCHAR(50),
+    billing_address TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -72,10 +76,13 @@ CREATE TABLE IF NOT EXISTS artwork_orders (
     email VARCHAR(255),
     phone VARCHAR(20),
     delivery_address TEXT,
-    payment_method ENUM('mpesa', 'card', 'bank') DEFAULT 'mpesa',
+    payment_method ENUM('mpesa', 'card', 'bank', 'invoice') DEFAULT 'mpesa',
     payment_status ENUM('pending', 'completed', 'failed') NOT NULL DEFAULT 'pending',
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     total_amount DECIMAL(10, 2) NOT NULL,
+    invoice_requested BOOLEAN DEFAULT FALSE,
+    special_instructions TEXT,
+    discount_applied DECIMAL(5, 2) DEFAULT 0.00,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (artwork_id) REFERENCES artworks(id)
 );
@@ -90,13 +97,27 @@ CREATE TABLE IF NOT EXISTS exhibition_bookings (
     phone VARCHAR(20),
     ticket_code VARCHAR(50),
     slots INT NOT NULL DEFAULT 1,
-    payment_method ENUM('mpesa', 'card', 'bank') DEFAULT 'mpesa',
+    payment_method ENUM('mpesa', 'card', 'bank', 'invoice') DEFAULT 'mpesa',
     payment_status ENUM('pending', 'completed', 'failed') NOT NULL DEFAULT 'pending',
     status ENUM('active', 'used', 'cancelled') DEFAULT 'active',
     booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     total_amount DECIMAL(10, 2) NOT NULL,
+    invoice_requested BOOLEAN DEFAULT FALSE,
+    special_instructions TEXT,
+    discount_applied DECIMAL(5, 2) DEFAULT 0.00,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (exhibition_id) REFERENCES exhibitions(id)
+);
+
+-- Shopping Cart table (for server-side carts if needed)
+CREATE TABLE IF NOT EXISTS cart_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    item_type ENUM('artwork', 'exhibition') NOT NULL,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Legacy tables (kept for backward compatibility)

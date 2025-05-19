@@ -1,49 +1,41 @@
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
 import { formatPrice } from '@/utils/formatters';
 import { createImageSrc, handleImageError } from '@/utils/imageUtils';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
-import ArtworkCard from '@/components/ArtworkCard';
+import { ShoppingCart, Check } from 'lucide-react';
+import ArtworkRecommendations from '@/components/ArtworkRecommendations';
 import { Artwork } from '@/types';
-import { getArtwork, getAllArtworks } from '@/services/api';
-import { Ban } from 'lucide-react';
 
 const ArtworkDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { toast } = useToast();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
-  const [relatedArtworks, setRelatedArtworks] = useState<Artwork[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { addToCart, isInCart } = useCart();
 
   useEffect(() => {
     const fetchArtwork = async () => {
-      if (!id) return;
-      
       try {
-        setLoading(true);
-        const data = await getArtwork(id);
-        console.log("Artwork data received:", data);
+        const response = await fetch(`http://localhost:8000/artworks/${id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch artwork');
+        }
+        const data = await response.json();
         setArtwork(data);
-        
-        // Fetch all artworks to get related ones by the same artist
-        const allArtworks = await getAllArtworks();
-        const related = allArtworks
-          .filter((a: Artwork) => a.id !== id && a.artist === data.artist)
-          .slice(0, 3);
-        
-        setRelatedArtworks(related);
       } catch (error) {
-        console.error('Failed to fetch artwork:', error);
+        console.error('Error fetching artwork:', error);
         toast({
-          title: "Error",
-          description: "Failed to load artwork details. Please try again later.",
-          variant: "destructive",
+          title: 'Error',
+          description: 'Failed to load artwork details',
+          variant: 'destructive',
         });
       } finally {
         setLoading(false);
@@ -51,139 +43,147 @@ const ArtworkDetail = () => {
     };
 
     fetchArtwork();
-  }, [id, toast]);
+  }, [id]);
 
   const handleBuyNow = () => {
-    if (!isAuthenticated) {
+    if (!user) {
       toast({
-        title: "Authentication Required",
-        description: "Please log in to purchase artwork",
-        variant: "destructive",
+        title: 'Authentication Required',
+        description: 'Please log in to purchase artwork',
       });
-      navigate('/login');
+      navigate(`/login?redirect=/artwork/${id}`);
       return;
     }
+
+    navigate(`/artwork/checkout/${id}`);
+  };
+
+  const handleAddToCart = () => {
+    if (!artwork) return;
     
-    navigate(`/checkout/artwork/${id}`);
+    addToCart('artwork', artwork);
   };
 
   if (loading) {
     return (
-      <div className="py-16 px-4 text-center">
-        <h1 className="text-2xl font-semibold mb-4">Loading Artwork...</h1>
-        <p className="mb-6">Please wait while we fetch the artwork details.</p>
+      <div className="container mx-auto py-12 px-4">
+        <div className="animate-pulse">
+          <div className="h-6 bg-gray-200 rounded w-1/3 mb-6"></div>
+          <div className="flex flex-col md:flex-row gap-8">
+            <div className="w-full md:w-1/2 aspect-square bg-gray-200 rounded-md"></div>
+            <div className="w-full md:w-1/2 space-y-4">
+              <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-24 bg-gray-200 rounded w-full"></div>
+              <div className="h-10 bg-gray-200 rounded w-1/3"></div>
+              <div className="h-10 bg-gray-200 rounded w-full"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!artwork) {
     return (
-      <div className="py-16 px-4 text-center">
-        <h1 className="text-2xl font-semibold mb-4">Artwork Not Found</h1>
-        <p className="mb-6">The artwork you're looking for doesn't exist or has been removed.</p>
-        <Button onClick={() => navigate('/artworks')}>
-          Back to Artworks
+      <div className="container mx-auto py-12 px-4 text-center">
+        <h2 className="text-2xl font-bold mb-4">Artwork Not Found</h2>
+        <p className="mb-6">
+          Sorry, we couldn't find the artwork you're looking for.
+        </p>
+        <Button asChild>
+          <Link to="/artworks">Browse All Artworks</Link>
         </Button>
       </div>
     );
   }
 
-  // Handle image_url vs imageUrl field name differences
-  const imageSource = artwork.image_url || artwork.imageUrl;
-  const imageUrl = createImageSrc(imageSource);
-  console.log(`ArtworkDetail: Image for ${artwork.title}: ${imageSource} → ${imageUrl}`);
-  
-  const isSold = artwork.status === 'sold';
+  const inCart = isInCart(artwork.id);
 
   return (
-    <div className="py-12 px-4 md:px-6 bg-secondary min-h-screen">
-      <div className="container mx-auto">
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="grid md:grid-cols-2 gap-6 lg:gap-12">
-            <div className="p-6 lg:p-8">
-              <div className="relative">
-                <AspectRatio ratio={3/4} className="overflow-hidden rounded-lg">
-                  <img 
-                    src={imageUrl} 
-                    alt={artwork.title}
-                    className="w-full h-full object-cover"
-                    onError={handleImageError}
-                  />
-                </AspectRatio>
-                {isSold && (
-                  <div className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2">
-                    <Ban className="h-5 w-5" />
-                    <span>Sold</span>
-                  </div>
-                )}
-              </div>
+    <div className="container mx-auto py-12 px-4">
+      <div className="mb-6">
+        <Link to="/artworks" className="text-blue-600 hover:underline">
+          ← Back to Artworks
+        </Link>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-8 mb-12">
+        <div className="w-full md:w-1/2">
+          <img
+            src={createImageSrc(artwork.imageUrl || artwork.image_url)}
+            alt={artwork.title}
+            className="w-full rounded-lg shadow-lg object-cover aspect-square"
+            onError={handleImageError}
+          />
+        </div>
+        <div className="w-full md:w-1/2">
+          <h1 className="text-3xl font-bold mb-2">{artwork.title}</h1>
+          <p className="text-xl text-gray-600 mb-4">By {artwork.artist}</p>
+          
+          <div className="bg-gray-100 rounded-md p-4 mb-4">
+            <p className="text-2xl font-bold">{formatPrice(artwork.price)}</p>
+            <p className="text-sm text-gray-500">
+              {artwork.status === 'available' ? 'Available for purchase' : 'Already sold'}
+            </p>
+          </div>
+          
+          <div className="mb-6">
+            <h3 className="font-semibold mb-2">Description</h3>
+            <p className="text-gray-700">{artwork.description}</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500">Dimensions</h3>
+              <p>{artwork.dimensions || 'Not specified'}</p>
             </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500">Medium</h3>
+              <p>{artwork.medium || 'Not specified'}</p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500">Year</h3>
+              <p>{artwork.year || 'Not specified'}</p>
+            </div>
+          </div>
+          
+          <Separator className="my-6" />
+          
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button
+              onClick={handleBuyNow}
+              className="w-full sm:w-auto"
+              disabled={artwork.status !== 'available'}
+            >
+              Buy Now
+            </Button>
             
-            <div className="p-6 lg:p-8 flex flex-col">
-              <h1 className="font-serif text-3xl md:text-4xl font-bold mb-2">
-                {artwork.title}
-              </h1>
-              <p className="text-xl text-gray-600 mb-6">by {artwork.artist}</p>
-              
-              <div className="bg-secondary p-4 rounded-md mb-6">
-                <p className="text-2xl font-medium text-gold">
-                  {formatPrice(artwork.price)}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {isSold ? 'Sold' : 'Available for Purchase'}
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <p className="text-sm text-gray-500">Dimensions</p>
-                  <p className="font-medium">{artwork.dimensions}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Medium</p>
-                  <p className="font-medium">{artwork.medium}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Year</p>
-                  <p className="font-medium">{artwork.year}</p>
-                </div>
-              </div>
-              
-              <div className="mb-8">
-                <h3 className="font-medium text-lg mb-2">Description</h3>
-                <p className="text-gray-600">{artwork.description}</p>
-              </div>
-              
-              <div className="mt-auto">
-                <Button 
-                  onClick={handleBuyNow}
-                  className={`w-full py-6 text-lg ${
-                    isSold 
-                      ? 'bg-gray-400 hover:bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-gold hover:bg-gold-dark text-white'
-                  }`}
-                  disabled={isSold}
-                >
-                  {isSold ? 'Sold Out' : 'Buy Now'}
-                </Button>
-              </div>
-            </div>
+            <Button
+              onClick={handleAddToCart}
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={artwork.status !== 'available' || inCart}
+            >
+              {inCart ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Added to Cart
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Add to Cart
+                </>
+              )}
+            </Button>
           </div>
         </div>
-        
-        {relatedArtworks.length > 0 && (
-          <div className="mt-16">
-            <h2 className="text-2xl font-serif font-bold mb-8">
-              More by {artwork.artist}
-            </h2>
-            <div className="artwork-grid">
-              {relatedArtworks.map((relatedArtwork) => (
-                <ArtworkCard key={relatedArtwork.id} artwork={relatedArtwork} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      <Separator className="my-12" />
+
+      <ArtworkRecommendations currentArtworkId={artwork.id} />
     </div>
   );
 };

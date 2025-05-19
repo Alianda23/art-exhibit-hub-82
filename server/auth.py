@@ -29,25 +29,72 @@ def register_user(name, email, password, phone):
         
         # Insert the new user
         query = """
-        INSERT INTO users (name, email, password, phone)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO users (name, email, password, phone, user_type)
+        VALUES (%s, %s, %s, %s, %s)
         """
-        cursor.execute(query, (name, email, hashed_password, phone))
+        cursor.execute(query, (name, email, hashed_password, phone, 'individual'))
         connection.commit()
         
         # Get the new user ID
         user_id = cursor.lastrowid
         
         # Generate token for the new user
-        token = generate_token(user_id, name, False)
+        token = generate_token(user_id, name, False, False, 'individual')
         
         return {
             "token": token,
             "user_id": user_id,
-            "name": name
+            "name": name,
+            "userType": 'individual'
         }
     except Exception as e:
         print(f"Error registering user: {e}")
+        return {"error": str(e)}
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def register_corporate_user(company_name, email, password, phone, tax_id, billing_address):
+    """Register a new corporate user"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    hashed_password = hash_password(password)
+    
+    try:
+        # Check if email already exists
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            return {"error": "Email already registered"}
+        
+        # Insert the new corporate user
+        query = """
+        INSERT INTO users (name, email, password, phone, user_type, company_name, tax_id, billing_address)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (company_name, email, hashed_password, phone, 'corporate', company_name, tax_id, billing_address))
+        connection.commit()
+        
+        # Get the new user ID
+        user_id = cursor.lastrowid
+        
+        # Generate token for the new corporate user
+        token = generate_token(user_id, company_name, False, False, 'corporate')
+        
+        return {
+            "token": token,
+            "user_id": user_id,
+            "name": company_name,
+            "userType": 'corporate',
+            "companyName": company_name,
+            "taxId": tax_id,
+            "billingAddress": billing_address
+        }
+    except Exception as e:
+        print(f"Error registering corporate user: {e}")
         return {"error": str(e)}
     finally:
         if connection.is_connected():
@@ -102,12 +149,15 @@ def login_user(email, password):
     if connection is None:
         return {"error": "Database connection failed"}
     
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
     hashed_password = hash_password(password)
     
     try:
         # Check user credentials
-        query = "SELECT id, name FROM users WHERE email = %s AND password = %s"
+        query = """
+        SELECT id, name, user_type, company_name, tax_id, billing_address, phone 
+        FROM users WHERE email = %s AND password = %s
+        """
         cursor.execute(query, (email, hashed_password))
         user = cursor.fetchone()
         
@@ -115,14 +165,33 @@ def login_user(email, password):
             return {"error": "Invalid credentials"}
         
         # Generate token for the user
-        user_id, name = user
-        token = generate_token(user_id, name, False)
+        user_id = user['id']
+        name = user['name']
+        user_type = user['user_type'] if user['user_type'] else 'individual'
+        company_name = user['company_name'] if 'company_name' in user else None
+        tax_id = user['tax_id'] if 'tax_id' in user else None
+        billing_address = user['billing_address'] if 'billing_address' in user else None
+        phone = user['phone'] if 'phone' in user else None
         
-        return {
+        token = generate_token(user_id, name, False, False, user_type)
+        
+        response = {
             "token": token,
             "user_id": user_id,
-            "name": name
+            "name": name,
+            "userType": user_type,
+            "phone": phone
         }
+        
+        # Add corporate details if applicable
+        if user_type == 'corporate':
+            response.update({
+                "companyName": company_name,
+                "taxId": tax_id,
+                "billingAddress": billing_address
+            })
+        
+        return response
     except Exception as e:
         print(f"Error logging in user: {e}")
         return {"error": str(e)}
@@ -203,13 +272,14 @@ def login_admin(email, password):
             cursor.close()
             connection.close()
 
-def generate_token(user_id, name, is_admin, is_artist=False):
+def generate_token(user_id, name, is_admin, is_artist=False, user_type='individual'):
     """Generate a JWT token for authentication"""
     payload = {
         "sub": str(user_id),  # Ensure user_id is converted to string
         "name": name,
         "is_admin": is_admin,
         "is_artist": is_artist,
+        "user_type": user_type,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
     }
     
