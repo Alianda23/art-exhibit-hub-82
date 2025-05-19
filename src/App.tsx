@@ -35,6 +35,10 @@ import ArtistArtworks from './pages/ArtistArtworks';
 import ArtistAddArtwork from './pages/ArtistAddArtwork';
 import ArtistEditArtwork from './pages/ArtistEditArtwork';
 import ArtistOrders from './pages/ArtistOrders';
+import CorporateLogin from './pages/CorporateLogin';
+import CorporateSignup from './pages/CorporateSignup';
+import Corporate from './pages/Corporate';
+import CorporateLayout from './components/CorporateLayout';
 
 function App() {
   return (
@@ -58,6 +62,16 @@ function App() {
         <Route path="/artist/orders" element={<ArtistOrders />} />
         <Route path="/artist-login" element={<ArtistLogin />} />
         <Route path="/artist-signup" element={<ArtistSignup />} />
+        
+        {/* Corporate Routes */}
+        <Route path="/corporate" element={<CorporateLayout><Corporate /></CorporateLayout>} />
+        <Route path="/corporate/orders" element={<CorporateLayout><div className="p-8"><h2 className="text-2xl font-serif mb-4">Corporate Orders</h2><p>This page is under development</p></div></CorporateLayout>} />
+        <Route path="/corporate/exhibitions" element={<CorporateLayout><div className="p-8"><h2 className="text-2xl font-serif mb-4">Corporate Exhibitions</h2><p>This page is under development</p></div></CorporateLayout>} />
+        <Route path="/corporate/invoices" element={<CorporateLayout><div className="p-8"><h2 className="text-2xl font-serif mb-4">Corporate Invoices</h2><p>This page is under development</p></div></CorporateLayout>} />
+        <Route path="/corporate/billing" element={<CorporateLayout><div className="p-8"><h2 className="text-2xl font-serif mb-4">Corporate Billing</h2><p>This page is under development</p></div></CorporateLayout>} />
+        <Route path="/corporate/settings" element={<CorporateLayout><div className="p-8"><h2 className="text-2xl font-serif mb-4">Corporate Settings</h2><p>This page is under development</p></div></CorporateLayout>} />
+        <Route path="/corporate-login" element={<CorporateLogin />} />
+        <Route path="/corporate-signup" element={<CorporateSignup />} />
         
         {/* Public Routes */}
         <Route path="/" element={
