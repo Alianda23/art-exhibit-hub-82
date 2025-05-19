@@ -1,38 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { formatPrice, formatDateRange } from '@/utils/formatters';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCart } from '@/contexts/CartContext';
-import ExhibitionDetails from '@/components/ExhibitionDetails';
-import { formatPrice } from '@/utils/formatters';
-import { ShoppingCart, Check } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { MapPin, Calendar, Ticket, Users, Ban } from 'lucide-react';
+import ExhibitionCard from '@/components/ExhibitionCard';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Exhibition } from '@/types';
+import { getExhibition, getAllExhibitions } from '@/services/api';
+import { createImageSrc, handleImageError } from '@/utils/imageUtils';
 
 const ExhibitionDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { toast } = useToast();
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const [slots, setSlots] = useState(1);
   const [exhibition, setExhibition] = useState<Exhibition | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const { addToCart, isInCart } = useCart();
+  const [relatedExhibitions, setRelatedExhibitions] = useState<Exhibition[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchExhibition = async () => {
+      if (!id) return;
+      
       try {
-        const response = await fetch(`http://localhost:8000/exhibitions/${id}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch exhibition');
-        }
-        const data = await response.json();
+        setLoading(true);
+        const data = await getExhibition(id);
         setExhibition(data);
+        
+        // Fetch all exhibitions to get related ones
+        const allExhibitions = await getAllExhibitions();
+        const related = allExhibitions
+          .filter((e: Exhibition) => e.id !== id)
+          .slice(0, 2);
+        
+        setRelatedExhibitions(related);
       } catch (error) {
-        console.error('Error fetching exhibition:', error);
+        console.error('Failed to fetch exhibition:', error);
         toast({
-          title: 'Error',
-          description: 'Failed to load exhibition details',
-          variant: 'destructive',
+          title: "Error",
+          description: "Failed to load exhibition details. Please try again later.",
+          variant: "destructive",
         });
       } finally {
         setLoading(false);
@@ -43,136 +55,155 @@ const ExhibitionDetail = () => {
   }, [id, toast]);
 
   const handleBookNow = () => {
-    if (!user) {
+    if (!isAuthenticated) {
       toast({
-        title: 'Authentication Required',
-        description: 'Please log in to book exhibition tickets',
+        title: "Authentication Required",
+        description: "Please log in to book exhibition tickets",
+        variant: "destructive",
       });
-      navigate(`/login?redirect=/exhibition/${id}`);
+      navigate('/login');
       return;
     }
-
-    navigate(`/exhibition/checkout/${id}`);
-  };
-
-  const handleAddToCart = () => {
-    if (!exhibition) return;
     
-    addToCart('exhibition', exhibition);
+    if (slots > exhibition?.availableSlots!) {
+      toast({
+        title: "Error",
+        description: `Only ${exhibition?.availableSlots} slots available`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    navigate(`/checkout/exhibition/${id}?slots=${slots}`);
   };
 
   if (loading) {
     return (
-      <div className="container mx-auto py-12 px-4">
-        <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/3 mb-6"></div>
-          <div className="flex flex-col gap-8">
-            <div className="w-full aspect-video bg-gray-200 rounded-md"></div>
-            <div className="space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-              <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-              <div className="h-24 bg-gray-200 rounded w-full"></div>
-              <div className="h-10 bg-gray-200 rounded w-1/3"></div>
-              <div className="h-10 bg-gray-200 rounded w-full"></div>
-            </div>
-          </div>
-        </div>
+      <div className="py-16 px-4 text-center">
+        <h1 className="text-2xl font-semibold mb-4">Loading Exhibition...</h1>
+        <p className="mb-6">Please wait while we fetch the exhibition details.</p>
       </div>
     );
   }
 
   if (!exhibition) {
     return (
-      <div className="container mx-auto py-12 px-4 text-center">
-        <h2 className="text-2xl font-bold mb-4">Exhibition Not Found</h2>
-        <p className="mb-6">
-          Sorry, we couldn't find the exhibition you're looking for.
-        </p>
-        <Button asChild>
-          <Link to="/exhibitions">Browse All Exhibitions</Link>
+      <div className="py-16 px-4 text-center">
+        <h1 className="text-2xl font-semibold mb-4">Exhibition Not Found</h1>
+        <p className="mb-6">The exhibition you're looking for doesn't exist or has been removed.</p>
+        <Button onClick={() => navigate('/exhibitions')}>
+          Back to Exhibitions
         </Button>
       </div>
     );
   }
 
-  const isPastExhibition = exhibition.status === 'past';
-  const isUpcomingExhibition = exhibition.status === 'upcoming';
-  const isOngoingExhibition = exhibition.status === 'ongoing';
-  const isSoldOut = exhibition.availableSlots <= 0;
-  const canBook = !isPastExhibition && !isSoldOut;
-
-  const inCart = isInCart(exhibition.id);
+  const isSoldOut = exhibition?.availableSlots === 0;
+  const isPast = exhibition?.status === 'past';
+  const isUnavailable = isSoldOut || isPast;
 
   return (
-    <div className="container mx-auto py-12 px-4">
-      <div className="mb-6">
-        <Link to="/exhibitions" className="text-blue-600 hover:underline">
-          ← Back to Exhibitions
-        </Link>
-      </div>
-
-      {exhibition && <ExhibitionDetails exhibition={exhibition} />}
-
-      <div className="mt-8 bg-gray-100 rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h3 className="text-2xl font-bold">
-              {formatPrice(exhibition.ticketPrice)}
-            </h3>
-            <p className="text-sm text-gray-600">per ticket</p>
+    <div className="py-12 px-4 md:px-6 bg-secondary min-h-screen">
+      <div className="container mx-auto">
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="grid md:grid-cols-2 gap-6 lg:gap-12">
+            <div className="p-6 lg:p-8">
+              <div className="relative">
+                <AspectRatio ratio={16/9} className="overflow-hidden rounded-lg">
+                  <img 
+                    src={exhibition ? createImageSrc(exhibition.imageUrl) : ''}
+                    alt={exhibition?.title || 'Exhibition'}
+                    className="w-full h-full object-cover"
+                    onError={handleImageError}
+                  />
+                </AspectRatio>
+                {isSoldOut && (
+                  <div className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2">
+                    <Ban className="h-5 w-5" />
+                    <span>Sold Out</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-6 lg:p-8 flex flex-col">
+              <h1 className="font-serif text-3xl md:text-4xl font-bold mb-4">
+                {exhibition.title}
+              </h1>
+              
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center">
+                  <Calendar className="h-5 w-5 mr-2 text-gold" />
+                  <span>{formatDateRange(exhibition.startDate, exhibition.endDate)}</span>
+                </div>
+                <div className="flex items-center">
+                  <MapPin className="h-5 w-5 mr-2 text-gold" />
+                  <span>{exhibition.location}</span>
+                </div>
+                <div className="flex items-center">
+                  <Ticket className="h-5 w-5 mr-2 text-gold" />
+                  <span>{formatPrice(exhibition.ticketPrice)} per ticket</span>
+                </div>
+                <div className="flex items-center">
+                  <Users className="h-5 w-5 mr-2 text-gold" />
+                  {isSoldOut ? (
+                    <span className="text-red-500 font-medium">No slots available</span>
+                  ) : (
+                    <span>{exhibition.availableSlots} slots available</span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="mb-8">
+                <h3 className="font-medium text-lg mb-2">About the Exhibition</h3>
+                <p className="text-gray-600">{exhibition.description}</p>
+              </div>
+              
+              <div className="mt-auto space-y-6">
+                {!isUnavailable && (
+                  <div className="space-y-2">
+                    <Label htmlFor="slots">Number of Tickets</Label>
+                    <Input
+                      id="slots"
+                      type="number"
+                      min={1}
+                      max={exhibition.availableSlots}
+                      value={slots}
+                      onChange={(e) => setSlots(parseInt(e.target.value) || 1)}
+                    />
+                    <p className="text-sm text-gray-500">
+                      Total: {formatPrice(exhibition.ticketPrice * slots)}
+                    </p>
+                  </div>
+                )}
+                
+                <Button 
+                  onClick={handleBookNow}
+                  className={`w-full py-6 text-lg ${
+                    isUnavailable 
+                      ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed' 
+                      : 'bg-gold hover:bg-gold-dark'
+                  } text-white`}
+                  disabled={isUnavailable}
+                >
+                  {isSoldOut ? 'Sold Out' : isPast ? 'Past Exhibition' : 'Book Now'}
+                </Button>
+              </div>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="font-medium">
-              {exhibition.availableSlots} / {exhibition.totalSlots} slots available
-            </p>
-            <p className="text-sm text-gray-600">
-              {isPastExhibition
-                ? 'This exhibition has ended'
-                : isOngoingExhibition
-                ? 'Exhibition ongoing'
-                : 'Upcoming exhibition'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Button
-            onClick={handleBookNow}
-            className="flex-1"
-            disabled={!canBook}
-          >
-            Book Now
-          </Button>
-          
-          <Button
-            onClick={handleAddToCart}
-            variant="outline"
-            className="flex-1"
-            disabled={!canBook || inCart}
-          >
-            {inCart ? (
-              <>
-                <Check className="mr-2 h-4 w-4" />
-                Added to Cart
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                Add to Cart
-              </>
-            )}
-          </Button>
         </div>
         
-        {isSoldOut && (
-          <p className="text-red-500 text-center mt-3">
-            Sorry, this exhibition is sold out.
-          </p>
-        )}
-        {isPastExhibition && (
-          <p className="text-gray-500 text-center mt-3">
-            This exhibition has already ended.
-          </p>
+        {relatedExhibitions.length > 0 && (
+          <div className="mt-16">
+            <h2 className="text-2xl font-serif font-bold mb-8">
+              Other Exhibitions You Might Like
+            </h2>
+            <div className="exhibition-grid">
+              {relatedExhibitions.map((relatedExhibition) => (
+                <ExhibitionCard key={relatedExhibition.id} exhibition={relatedExhibition} />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

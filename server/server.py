@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from decimal import Decimal
 
 # Import modules
-from auth import register_user, register_corporate_user, login_user, login_admin, register_artist, login_artist
+from auth import register_user, login_user, login_admin, register_artist, login_artist
 from artwork import get_all_artworks, get_artwork, create_artwork, update_artwork, delete_artwork
 from exhibition import get_all_exhibitions, get_exhibition, create_exhibition, update_exhibition, delete_exhibition
 from contact import create_contact_message, get_messages, update_message, json_dumps
@@ -465,15 +465,15 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json_dumps(response).encode())
             return
         
-        # Register corporate user
-        elif path == '/register-corporate':
+        # Register artist
+        elif path == '/register-artist':
             if not post_data:
                 self._set_response(400)
                 self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
                 return
             
             # Check required fields
-            required_fields = ['companyName', 'email', 'password', 'phone', 'taxId', 'billingAddress']
+            required_fields = ['name', 'email', 'password']
             missing_fields = [field for field in required_fields if field not in post_data]
             
             if missing_fields:
@@ -481,14 +481,13 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(json_dumps({"error": f"Missing required fields: {', '.join(missing_fields)}"}).encode())
                 return
             
-            # Register the corporate user
-            response = register_corporate_user(
-                post_data['companyName'],
-                post_data['email'],
+            # Register the artist
+            response = register_artist(
+                post_data['name'], 
+                post_data['email'], 
                 post_data['password'],
-                post_data.get('phone', ''),
-                post_data.get('taxId', ''),
-                post_data.get('billingAddress', '')
+                post_data.get('phone', ''),  # Optional field
+                post_data.get('bio', '')     # Optional field
             )
             
             if "error" in response:

@@ -5,10 +5,6 @@ export interface User {
   email: string;
   phone?: string;
   isAdmin: boolean;
-  userType?: 'individual' | 'corporate';
-  companyName?: string;
-  taxId?: string;
-  billingAddress?: string;
 }
 
 export interface Artwork {
@@ -75,17 +71,4 @@ export interface ContactMessage {
   message: string;
   date: string;
   status: 'new' | 'read' | 'replied';
-}
-
-export interface CartItem {
-  id: string;
-  type: 'artwork' | 'exhibition';
-  item: Artwork | Exhibition;
-  quantity: number;
-  addedAt: string;
-}
-
-export interface Cart {
-  items: CartItem[];
-  totalAmount: number;
 }
