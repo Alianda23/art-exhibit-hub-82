@@ -1,3 +1,4 @@
+
 // M-Pesa API utilities
 
 // M-Pesa credentials
@@ -131,51 +132,35 @@ export const finalizeOrder = async (
 };
 
 // Function to get user orders
-export const getUserOrders = async (userId: string) => {
+export const getUserOrders = async (userId: string): Promise<any> => {
   try {
-    console.log(`Fetching orders for user ${userId}`);
-    const response = await fetch(`http://localhost:8000/orders/user/${userId}`, {
+    const response = await fetch(`${API_URL}/orders/user/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+      },
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user orders');
-    }
-
-    const data = await response.json();
-    console.log('User orders data:', data);
-    return data;
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching user orders:', error);
+    console.error('Get user orders error:', error);
     throw error;
   }
 };
 
 // Function to generate exhibition ticket
-export const generateExhibitionTicket = async (bookingId: string) => {
+export const generateExhibitionTicket = async (bookingId: string): Promise<any> => {
   try {
-    console.log(`Generating ticket for booking ${bookingId}`);
-    const response = await fetch(`http://localhost:8000/tickets/generate/${bookingId}`, {
+    const response = await fetch(`${API_URL}/tickets/generate/${bookingId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+      },
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate ticket');
-    }
-
-    const data = await response.json();
-    console.log('Ticket generation response:', data);
-    return data;
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error generating ticket:', error);
+    console.error('Ticket generation error:', error);
     throw error;
   }
 };

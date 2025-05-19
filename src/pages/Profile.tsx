@@ -6,10 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate } from '@/utils/formatters';
-import { CalendarIcon, MapPinIcon, UserIcon, PhoneIcon, MailIcon, Loader2, Ticket } from 'lucide-react';
+import { CalendarIcon, MapPinIcon, UserIcon, PhoneIcon, MailIcon, Loader2 } from 'lucide-react';
 import { getUserOrders, generateExhibitionTicket } from '@/utils/mpesa';
 import { useToast } from '@/hooks/use-toast';
-import { createImageSrc, handleImageError } from '@/utils/imageUtils';
 
 type UserOrder = {
   id: string;
@@ -22,7 +21,6 @@ type UserOrder = {
   totalAmount: number;
   status: string;
   deliveryAddress: string;
-  image_url?: string;
 };
 
 type UserBooking = {
@@ -34,8 +32,6 @@ type UserBooking = {
   slots: number;
   totalAmount: number;
   status: string;
-  ticket_code?: string;
-  image_url?: string;
 };
 
 const Profile = () => {
@@ -67,42 +63,11 @@ const Profile = () => {
       console.log("User orders response:", response);
       
       if (response.orders) {
-        // Process orders to ensure consistent property names
-        const processedOrders = response.orders.map((order: any) => ({
-          id: order.id,
-          artworkId: order.artwork_id || order.artworkId,
-          artworkTitle: order.artwork_title || order.artworkTitle,
-          artist: order.artist,
-          date: order.order_date || order.date,
-          price: order.price || 0,
-          deliveryFee: order.delivery_fee || order.deliveryFee || 0,
-          totalAmount: order.total_amount || order.totalAmount || 0,
-          status: order.payment_status || order.status,
-          deliveryAddress: order.delivery_address || order.deliveryAddress || '',
-          image_url: order.image_url
-        }));
-        
-        setOrders(processedOrders);
-        console.log("Processed orders:", processedOrders);
+        setOrders(response.orders);
       }
       
       if (response.bookings) {
-        // Process bookings to ensure consistent property names
-        const processedBookings = response.bookings.map((booking: any) => ({
-          id: booking.id,
-          exhibitionId: booking.exhibition_id || booking.exhibitionId,
-          exhibitionTitle: booking.exhibition_title || booking.exhibitionTitle,
-          date: booking.booking_date || booking.date,
-          location: booking.location,
-          slots: booking.slots || 1,
-          totalAmount: booking.total_amount || booking.totalAmount || 0,
-          status: booking.status,
-          ticket_code: booking.ticket_code,
-          image_url: booking.image_url
-        }));
-        
-        setBookings(processedBookings);
-        console.log("Processed bookings:", processedBookings);
+        setBookings(response.bookings);
       }
     } catch (error) {
       console.error('Error fetching user orders:', error);
@@ -137,10 +102,6 @@ const Profile = () => {
         variant: "destructive"
       });
     }
-  };
-  
-  const getImageUrl = (imageSource?: string) => {
-    return imageSource ? createImageSrc(imageSource) : '/placeholder.svg';
   };
 
   return (
@@ -228,54 +189,38 @@ const Profile = () => {
                 {bookings.map((booking) => (
                   <Card key={booking.id} className="overflow-hidden">
                     <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row gap-4">
-                        <div className="md:w-32 flex-shrink-0">
-                          <img 
-                            src={getImageUrl(booking.image_url)} 
-                            alt={booking.exhibitionTitle}
-                            className="w-full h-24 object-cover rounded"
-                            onError={handleImageError}
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between">
-                          <div>
-                            <h3 className="font-medium text-lg">{booking.exhibitionTitle}</h3>
-                            <div className="flex items-center text-gray-600 mt-1">
-                              <CalendarIcon className="h-4 w-4 mr-1 text-gold" />
-                              <span className="text-sm">{formatDate(booking.date)}</span>
-                            </div>
-                            <div className="flex items-center text-gray-600 mt-1">
-                              <MapPinIcon className="h-4 w-4 mr-1 text-gold" />
-                              <span className="text-sm">{booking.location}</span>
-                            </div>
-                            {booking.ticket_code && (
-                              <div className="flex items-center text-gray-600 mt-1">
-                                <Ticket className="h-4 w-4 mr-1 text-gold" />
-                                <span className="text-sm font-medium">Ticket: {booking.ticket_code}</span>
-                              </div>
-                            )}
+                      <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-lg">{booking.exhibitionTitle}</h3>
+                          <div className="flex items-center text-gray-600 mt-1">
+                            <CalendarIcon className="h-4 w-4 mr-1 text-gold" />
+                            <span className="text-sm">{formatDate(booking.date)}</span>
                           </div>
-                          <div className="text-right mt-4 md:mt-0">
-                            <div className="text-sm mb-1">
-                              <span className="text-gray-600">Tickets: </span>
-                              <span className="font-medium">{booking.slots}</span>
+                          <div className="flex items-center text-gray-600 mt-1">
+                            <MapPinIcon className="h-4 w-4 mr-1 text-gold" />
+                            <span className="text-sm">{booking.location}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm mb-1">
+                            <span className="text-gray-600">Tickets: </span>
+                            <span className="font-medium">{booking.slots}</span>
+                          </div>
+                          <div className="text-sm mb-2">
+                            <span className="text-gray-600">Total: </span>
+                            <span className="font-medium">{formatPrice(booking.totalAmount)}</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                            <div className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                              {booking.status}
                             </div>
-                            <div className="text-sm mb-2">
-                              <span className="text-gray-600">Total: </span>
-                              <span className="font-medium">{formatPrice(booking.totalAmount)}</span>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                              <div className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                                {booking.status}
-                              </div>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                onClick={() => handlePrintTicket(booking.id)}
-                              >
-                                Print Ticket
-                              </Button>
-                            </div>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => handlePrintTicket(booking.id)}
+                            >
+                              Print Ticket
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -309,52 +254,42 @@ const Profile = () => {
                 {orders.map((order) => (
                   <Card key={order.id} className="overflow-hidden">
                     <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row gap-4">
-                        <div className="md:w-32 flex-shrink-0">
-                          <img 
-                            src={getImageUrl(order.image_url)} 
-                            alt={order.artworkTitle}
-                            className="w-full h-24 object-cover rounded"
-                            onError={handleImageError}
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between">
-                          <div>
-                            <h3 className="font-medium text-lg">{order.artworkTitle}</h3>
-                            <p className="text-gray-600 text-sm">by {order.artist}</p>
-                            <div className="flex items-center text-gray-600 mt-1">
-                              <CalendarIcon className="h-4 w-4 mr-1 text-gold" />
-                              <span className="text-sm">Ordered on {formatDate(order.date)}</span>
-                            </div>
-                            {order.deliveryAddress && (
-                              <div className="text-gray-600 mt-2 text-sm">
-                                <p><strong>Delivery Address:</strong></p>
-                                <p>{order.deliveryAddress}</p>
-                              </div>
-                            )}
+                      <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-lg">{order.artworkTitle}</h3>
+                          <p className="text-gray-600 text-sm">by {order.artist}</p>
+                          <div className="flex items-center text-gray-600 mt-1">
+                            <CalendarIcon className="h-4 w-4 mr-1 text-gold" />
+                            <span className="text-sm">Ordered on {formatDate(order.date)}</span>
                           </div>
-                          <div className="text-right mt-4 md:mt-0">
+                          {order.deliveryAddress && (
+                            <div className="text-gray-600 mt-2 text-sm">
+                              <p><strong>Delivery Address:</strong></p>
+                              <p>{order.deliveryAddress}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm mb-1">
+                            <span className="text-gray-600">Price: </span>
+                            <span className="font-medium">{formatPrice(order.price)}</span>
+                          </div>
+                          {order.deliveryFee > 0 && (
                             <div className="text-sm mb-1">
-                              <span className="text-gray-600">Price: </span>
-                              <span className="font-medium">{formatPrice(order.price)}</span>
+                              <span className="text-gray-600">Delivery: </span>
+                              <span className="font-medium">{formatPrice(order.deliveryFee)}</span>
                             </div>
-                            {order.deliveryFee > 0 && (
-                              <div className="text-sm mb-1">
-                                <span className="text-gray-600">Delivery: </span>
-                                <span className="font-medium">{formatPrice(order.deliveryFee)}</span>
-                              </div>
-                            )}
-                            <div className="text-sm mb-2">
-                              <span className="text-gray-600">Total: </span>
-                              <span className="font-medium">{formatPrice(order.totalAmount)}</span>
-                            </div>
-                            <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium
-                              ${order.status === 'completed' ? 'bg-green-100 text-green-800' : 
-                                order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                'bg-red-100 text-red-800'}
-                            `}>
-                              {order.status.toUpperCase()}
-                            </div>
+                          )}
+                          <div className="text-sm mb-2">
+                            <span className="text-gray-600">Total: </span>
+                            <span className="font-medium">{formatPrice(order.totalAmount)}</span>
+                          </div>
+                          <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium
+                            ${order.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                              order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                              'bg-red-100 text-red-800'}
+                          `}>
+                            {order.status.toUpperCase()}
                           </div>
                         </div>
                       </div>
