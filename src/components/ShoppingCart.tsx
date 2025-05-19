@@ -5,20 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { formatPrice } from '@/utils/formatters';
 import { createImageSrc, handleImageError } from '@/utils/imageUtils';
-import { Trash2, Minus, Plus, ShoppingCart } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingCart as ShoppingCartIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ShoppingCartProps {
   onClose?: () => void;
+  className?: string;
 }
 
-const ShoppingCart: React.FC<ShoppingCartProps> = ({ onClose }) => {
+const ShoppingCart: React.FC<ShoppingCartProps> = ({ onClose, className }) => {
   const { cart, removeFromCart, updateQuantity, clearCart } = useCart();
 
   if (cart.items.length === 0) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[300px]">
-        <ShoppingCart className="w-16 h-16 text-gray-400 mb-4" />
+      <div className={`p-6 flex flex-col items-center justify-center min-h-[300px] ${className || ''}`}>
+        <ShoppingCartIcon className="w-16 h-16 text-gray-400 mb-4" />
         <h3 className="text-xl font-medium text-center mb-2">Your cart is empty</h3>
         <p className="text-gray-500 text-center mb-4">Add some artworks or exhibition tickets to your cart</p>
         <Button onClick={onClose} variant="outline">Continue Shopping</Button>
@@ -27,7 +28,7 @@ const ShoppingCart: React.FC<ShoppingCartProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="p-4">
+    <div className={`p-4 ${className || ''}`}>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Your Cart ({cart.items.length} items)</h2>
         <Button variant="ghost" size="sm" onClick={clearCart} className="text-red-500">

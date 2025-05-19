@@ -1,10 +1,10 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: User | null;
+  currentUser: User | null; // Add this property
   isLoading: boolean;
   isAdmin: boolean;
   isArtist: boolean;
@@ -14,7 +14,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string, phone: string) => Promise<boolean>;
   signupCorporate: (companyName: string, email: string, password: string, phone: string, taxId: string, billingAddress: string) => Promise<boolean>;
   loginArtist: (email: string, password: string) => Promise<boolean>;
-  loginAdmin: (email: string, password: string) => Promise<boolean>;
+  adminLogin: (email: string, password: string) => Promise<boolean>; // Add this property
   signupArtist: (name: string, email: string, password: string, phone: string, bio: string) => Promise<boolean>;
 }
 
@@ -26,6 +26,7 @@ const API_URL = 'http://localhost:8000';
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  currentUser: null, // Add this property
   isLoading: true,
   isAdmin: false,
   isArtist: false,
@@ -35,7 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   signup: async () => false,
   signupCorporate: async () => false,
   loginArtist: async () => false,
-  loginAdmin: async () => false,
+  adminLogin: async () => false, // Add this property
   signupArtist: async () => false,
 });
 
@@ -313,7 +314,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const loginAdmin = async (email: string, password: string) => {
+  const adminLogin = async (email: string, password: string) => {
     try {
       const response = await fetch(`${API_URL}/admin-login`, {
         method: 'POST',
@@ -423,10 +424,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const isArtist = localStorage.getItem('isArtist') === 'true';
   const isCorporate = user?.userType === 'corporate';
 
+  // Add the currentUser property to make it compatible with existing code
+  const currentUser = user;
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        currentUser, // Add this property
         isLoading,
         isAdmin,
         isArtist,
@@ -436,7 +441,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         signup,
         signupCorporate,
         loginArtist,
-        loginAdmin,
+        adminLogin, // Add this property
         signupArtist,
       }}
     >
