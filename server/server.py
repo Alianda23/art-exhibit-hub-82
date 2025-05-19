@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from decimal import Decimal
 
 # Import modules
-from auth import register_user, login_user, login_admin, register_artist, login_artist
+from auth import register_user, login_user, login_admin, register_artist, login_artist, register_corporate_user, login_corporate_user
 from artwork import get_all_artworks, get_artwork, create_artwork, update_artwork, delete_artwork
 from exhibition import get_all_exhibitions, get_exhibition, create_exhibition, update_exhibition, delete_exhibition
 from contact import create_contact_message, get_messages, update_message, json_dumps
@@ -498,6 +498,46 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json_dumps(response).encode())
             return
         
+        # Register corporate user
+        elif path == '/register-corporate':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing registration data"}).encode())
+                return
+            
+            print(f"Corporate registration data: {post_data}")
+            
+            # Check required fields
+            required_fields = ['name', 'email', 'password', 'company_name', 'billing_address', 'contact_person']
+            missing_fields = [field for field in required_fields if field not in post_data]
+            
+            if missing_fields:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": f"Missing required fields: {', '.join(missing_fields)}"}).encode())
+                return
+            
+            # Register the corporate user
+            response = register_corporate_user(
+                post_data['name'], 
+                post_data['email'], 
+                post_data['password'],
+                post_data.get('phone', ''),
+                post_data.get('company_name', ''),
+                post_data.get('registration_number', ''),
+                post_data.get('tax_id', ''),
+                post_data.get('billing_address', ''),
+                post_data.get('contact_person', ''),
+                post_data.get('contact_position', '')
+            )
+            
+            if "error" in response:
+                self._set_response(400)
+            else:
+                self._set_response(201)
+            
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
         # User login
         elif path == '/login':
             if not post_data:
@@ -548,7 +588,32 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json_dumps(response).encode())
             return
         
-        # Admin login - Fixed the endpoint
+        # Corporate login
+        elif path == '/corporate-login':
+            if not post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Missing login data"}).encode())
+                return
+            
+            # Check required fields
+            if 'email' not in post_data or 'password' not in post_data:
+                self._set_response(400)
+                self.wfile.write(json_dumps({"error": "Email and password required"}).encode())
+                return
+            
+            # Login the corporate user
+            response = login_corporate_user(post_data['email'], post_data['password'])
+            
+            if "error" in response:
+                self._set_response(401)
+                self.wfile.write(json_dumps(response).encode())
+                return
+            
+            self._set_response(200)
+            self.wfile.write(json_dumps(response).encode())
+            return
+        
+        # Admin login
         elif path == '/admin-login':
             if not post_data:
                 self._set_response(400)

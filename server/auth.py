@@ -1,149 +1,182 @@
 
-import hashlib
-import secrets
-from database import get_db_connection, json_dumps
 import jwt
-import datetime
-import os
-from decimal import Decimal
-from middleware import SECRET_KEY  # Import the shared SECRET_KEY
+import bcrypt
+import secrets
+import string
+import time
+from database import get_db_connection
 
-def hash_password(password):
-    """Hash a password using SHA-256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+# Secret key for JWT
+SECRET_KEY = "your_secret_key_for_jwt"  # In production, use an environment variable
 
-def register_user(name, email, password, phone):
+# Token expiry (24 hours in seconds)
+TOKEN_EXPIRY = 60 * 60 * 24
+
+def generate_salt():
+    """Generate a salt for password hashing"""
+    return bcrypt.gensalt()
+
+def hash_password(password, salt=None):
+    """Hash a password with bcrypt"""
+    if not salt:
+        salt = generate_salt()
+    password_bytes = password.encode('utf-8')
+    salt_bytes = salt if isinstance(salt, bytes) else salt.encode('utf-8')
+    hashed_password = bcrypt.hashpw(password_bytes, salt_bytes)
+    return hashed_password.decode('utf-8')
+
+def check_password(password, hashed_password):
+    """Check if a password matches a hash"""
+    password_bytes = password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
+
+def generate_token(user_id, name, is_admin=False, is_artist=False, is_corporate=False):
+    """Generate a JWT token for authentication"""
+    payload = {
+        "sub": user_id,
+        "name": name,
+        "is_admin": is_admin,
+        "is_artist": is_artist,
+        "is_corporate": is_corporate,
+        "exp": int(time.time()) + TOKEN_EXPIRY
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return token
+
+def register_user(name, email, password, phone=""):
     """Register a new user"""
+    # Check if the email already exists
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
     
     cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
     try:
-        # Check if email already exists
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        # Check if email exists in any user table
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s " +
+            "UNION SELECT id FROM admins WHERE email = %s " +
+            "UNION SELECT id FROM artists WHERE email = %s " + 
+            "UNION SELECT id FROM corporate_users WHERE email = %s",
+            (email, email, email, email)
+        )
         if cursor.fetchone():
             return {"error": "Email already registered"}
+        
+        # Hash the password
+        hashed_password = hash_password(password)
         
         # Insert the new user
-        query = """
-        INSERT INTO users (name, email, password, phone)
-        VALUES (%s, %s, %s, %s)
-        """
-        cursor.execute(query, (name, email, hashed_password, phone))
+        cursor.execute(
+            "INSERT INTO users (name, email, password, phone, created_at) VALUES (%s, %s, %s, %s, NOW()) RETURNING id",
+            (name, email, hashed_password, phone)
+        )
+        user_id = cursor.fetchone()[0]
         connection.commit()
         
-        # Get the new user ID
-        user_id = cursor.lastrowid
+        # Generate and return token
+        token = generate_token(user_id, name)
+        return {"token": token, "user_id": user_id, "name": name}
         
-        # Generate token for the new user
-        token = generate_token(user_id, name, False)
-        
-        return {
-            "token": token,
-            "user_id": user_id,
-            "name": name
-        }
     except Exception as e:
         print(f"Error registering user: {e}")
+        connection.rollback()
         return {"error": str(e)}
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
 
-def register_corporate_user(name, email, password, phone, company_name, registration_number, tax_id, 
-                           billing_address, contact_person, contact_position):
-    """Register a new corporate user"""
-    connection = get_db_connection()
-    if connection is None:
-        return {"error": "Database connection failed"}
-    
-    cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
-    try:
-        # Check if email already exists
-        cursor.execute("SELECT id FROM corporate_users WHERE email = %s", (email,))
-        if cursor.fetchone():
-            return {"error": "Email already registered"}
-        
-        # Insert the new corporate user
-        query = """
-        INSERT INTO corporate_users (
-            name, email, password, phone, company_name, registration_number, 
-            tax_id, billing_address, contact_person, contact_position, allow_invoicing
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        cursor.execute(query, (
-            name, email, hashed_password, phone, company_name, registration_number,
-            tax_id, billing_address, contact_person, contact_position, True
-        ))
-        connection.commit()
-        
-        # Get the new corporate user ID
-        corporate_user_id = cursor.lastrowid
-        
-        # Generate token for the new corporate user
-        token = generate_token(corporate_user_id, name, False, False, True)
-        
-        return {
-            "token": token,
-            "corporate_user_id": corporate_user_id,
-            "name": name
-        }
-    except Exception as e:
-        print(f"Error registering corporate user: {e}")
-        return {"error": str(e)}
-    finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
-
-def register_artist(name, email, password, phone, bio=""):
+def register_artist(name, email, password, phone="", bio=""):
     """Register a new artist"""
+    # Check if the email already exists
     connection = get_db_connection()
     if connection is None:
         return {"error": "Database connection failed"}
     
     cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
     try:
-        # Check if email already exists
-        cursor.execute("SELECT id FROM artists WHERE email = %s", (email,))
+        # Check if email exists in any user table
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s " +
+            "UNION SELECT id FROM admins WHERE email = %s " +
+            "UNION SELECT id FROM artists WHERE email = %s " +
+            "UNION SELECT id FROM corporate_users WHERE email = %s",
+            (email, email, email, email)
+        )
         if cursor.fetchone():
             return {"error": "Email already registered"}
+        
+        # Hash the password
+        hashed_password = hash_password(password)
         
         # Insert the new artist
-        query = """
-        INSERT INTO artists (name, email, password, phone, bio)
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        cursor.execute(query, (name, email, hashed_password, phone, bio))
+        cursor.execute(
+            "INSERT INTO artists (name, email, password, phone, bio, created_at) VALUES (%s, %s, %s, %s, %s, NOW()) RETURNING id",
+            (name, email, hashed_password, phone, bio)
+        )
+        artist_id = cursor.fetchone()[0]
         connection.commit()
         
-        # Get the new artist ID
-        artist_id = cursor.lastrowid
+        # Generate and return token
+        token = generate_token(artist_id, name, is_artist=True)
+        return {"token": token, "artist_id": artist_id, "name": name}
         
-        # Generate token for the new artist
-        token = generate_token(artist_id, name, False, True)
-        
-        return {
-            "token": token,
-            "artist_id": artist_id,
-            "name": name
-        }
     except Exception as e:
         print(f"Error registering artist: {e}")
+        connection.rollback()
         return {"error": str(e)}
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
+
+def register_corporate_user(name, email, password, phone="", company_name="", registration_number="", 
+                            tax_id="", billing_address="", contact_person="", contact_position=""):
+    """Register a new corporate user"""
+    # Check if the email already exists
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    try:
+        # Check if email exists in any user table
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s " +
+            "UNION SELECT id FROM admins WHERE email = %s " +
+            "UNION SELECT id FROM artists WHERE email = %s " +
+            "UNION SELECT id FROM corporate_users WHERE email = %s",
+            (email, email, email, email)
+        )
+        if cursor.fetchone():
+            return {"error": "Email already registered"}
+        
+        # Hash the password
+        hashed_password = hash_password(password)
+        
+        # Insert the new corporate user
+        cursor.execute(
+            """INSERT INTO corporate_users 
+               (name, email, password, phone, company_name, registration_number, 
+                tax_id, billing_address, contact_person, contact_position, created_at) 
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()) RETURNING id""",
+            (name, email, hashed_password, phone, company_name, registration_number,
+             tax_id, billing_address, contact_person, contact_position)
+        )
+        corporate_id = cursor.fetchone()[0]
+        connection.commit()
+        
+        # Generate and return token
+        token = generate_token(corporate_id, name, is_corporate=True)
+        return {"token": token, "corporate_user_id": corporate_id, "name": name}
+        
+    except Exception as e:
+        print(f"Error registering corporate user: {e}")
+        connection.rollback()
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        connection.close()
 
 def login_user(email, password):
     """Login a user"""
@@ -152,68 +185,33 @@ def login_user(email, password):
         return {"error": "Database connection failed"}
     
     cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
     try:
-        # Check user credentials
-        query = "SELECT id, name FROM users WHERE email = %s AND password = %s"
-        cursor.execute(query, (email, hashed_password))
+        # Get user with the given email
+        cursor.execute(
+            "SELECT id, name, password FROM users WHERE email = %s",
+            (email,)
+        )
         user = cursor.fetchone()
         
         if not user:
-            return {"error": "Invalid credentials"}
+            return {"error": "Invalid email or password"}
         
-        # Generate token for the user
-        user_id, name = user
-        token = generate_token(user_id, name, False)
+        user_id, name, hashed_password = user
         
-        return {
-            "token": token,
-            "user_id": user_id,
-            "name": name
-        }
+        # Check password
+        if not check_password(password, hashed_password):
+            return {"error": "Invalid email or password"}
+        
+        # Generate and return token
+        token = generate_token(user_id, name)
+        return {"token": token, "user_id": user_id, "name": name}
+        
     except Exception as e:
         print(f"Error logging in user: {e}")
         return {"error": str(e)}
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
-
-def login_corporate_user(email, password):
-    """Login a corporate user"""
-    connection = get_db_connection()
-    if connection is None:
-        return {"error": "Database connection failed"}
-    
-    cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
-    try:
-        # Check corporate user credentials
-        query = "SELECT id, name FROM corporate_users WHERE email = %s AND password = %s"
-        cursor.execute(query, (email, hashed_password))
-        corporate_user = cursor.fetchone()
-        
-        if not corporate_user:
-            return {"error": "Invalid credentials"}
-        
-        # Generate token for the corporate user
-        corporate_user_id, name = corporate_user
-        token = generate_token(corporate_user_id, name, False, False, True)
-        
-        return {
-            "token": token,
-            "corporate_user_id": corporate_user_id,
-            "name": name
-        }
-    except Exception as e:
-        print(f"Error logging in corporate user: {e}")
-        return {"error": str(e)}
-    finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
 
 def login_artist(email, password):
     """Login an artist"""
@@ -222,33 +220,68 @@ def login_artist(email, password):
         return {"error": "Database connection failed"}
     
     cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
     try:
-        # Check artist credentials
-        query = "SELECT id, name FROM artists WHERE email = %s AND password = %s"
-        cursor.execute(query, (email, hashed_password))
+        # Get artist with the given email
+        cursor.execute(
+            "SELECT id, name, password FROM artists WHERE email = %s",
+            (email,)
+        )
         artist = cursor.fetchone()
         
         if not artist:
-            return {"error": "Invalid credentials"}
+            return {"error": "Invalid email or password"}
         
-        # Generate token for the artist
-        artist_id, name = artist
-        token = generate_token(artist_id, name, False, True)
+        artist_id, name, hashed_password = artist
         
-        return {
-            "token": token,
-            "artist_id": artist_id,
-            "name": name
-        }
+        # Check password
+        if not check_password(password, hashed_password):
+            return {"error": "Invalid email or password"}
+        
+        # Generate and return token
+        token = generate_token(artist_id, name, is_artist=True)
+        return {"token": token, "artist_id": artist_id, "name": name}
+        
     except Exception as e:
         print(f"Error logging in artist: {e}")
         return {"error": str(e)}
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
+
+def login_corporate_user(email, password):
+    """Login a corporate user"""
+    connection = get_db_connection()
+    if connection is None:
+        return {"error": "Database connection failed"}
+    
+    cursor = connection.cursor()
+    try:
+        # Get corporate user with the given email
+        cursor.execute(
+            "SELECT id, name, password FROM corporate_users WHERE email = %s",
+            (email,)
+        )
+        corporate_user = cursor.fetchone()
+        
+        if not corporate_user:
+            return {"error": "Invalid email or password"}
+        
+        corporate_id, name, hashed_password = corporate_user
+        
+        # Check password
+        if not check_password(password, hashed_password):
+            return {"error": "Invalid email or password"}
+        
+        # Generate and return token
+        token = generate_token(corporate_id, name, is_corporate=True)
+        return {"token": token, "corporate_user_id": corporate_id, "name": name}
+        
+    except Exception as e:
+        print(f"Error logging in corporate user: {e}")
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        connection.close()
 
 def login_admin(email, password):
     """Login an admin"""
@@ -257,100 +290,30 @@ def login_admin(email, password):
         return {"error": "Database connection failed"}
     
     cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
     try:
-        # Check admin credentials
-        query = "SELECT id, name FROM admins WHERE email = %s AND password = %s"
-        cursor.execute(query, (email, hashed_password))
+        # Get admin with the given email
+        cursor.execute(
+            "SELECT id, name, password FROM admins WHERE email = %s",
+            (email,)
+        )
         admin = cursor.fetchone()
         
         if not admin:
-            return {"error": "Invalid admin credentials"}
+            return {"error": "Invalid email or password"}
         
-        # Generate token for the admin
-        admin_id, name = admin
-        token = generate_token(admin_id, name, True)
+        admin_id, name, hashed_password = admin
         
-        print(f"Admin login successful: {name}, admin_id: {admin_id}, token: {token[:20]}...")
+        # Check password
+        if not check_password(password, hashed_password):
+            return {"error": "Invalid email or password"}
         
-        return {
-            "token": token,
-            "admin_id": admin_id,
-            "name": name
-        }
+        # Generate and return token
+        token = generate_token(admin_id, name, is_admin=True)
+        return {"token": token, "admin_id": admin_id, "name": name}
+        
     except Exception as e:
         print(f"Error logging in admin: {e}")
         return {"error": str(e)}
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
-
-def generate_token(user_id, name, is_admin, is_artist=False, is_corporate=False):
-    """Generate a JWT token for authentication"""
-    payload = {
-        "sub": str(user_id),  # Ensure user_id is converted to string
-        "name": name,
-        "is_admin": is_admin,
-        "is_artist": is_artist,
-        "is_corporate": is_corporate,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
-    }
-    
-    print(f"Generating token with payload: {payload}")
-    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-    return token
-
-def verify_token(token):
-    """Verify a JWT token"""
-    try:
-        print(f"Verifying token: {token[:20]}...")
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        print(f"Token decoded successfully: {payload}")
-        return payload
-    except jwt.ExpiredSignatureError:
-        print("Token verification failed: Token expired")
-        return {"error": "Token expired"}
-    except jwt.InvalidTokenError as e:
-        print(f"Token verification failed: Invalid token - {str(e)}")
-        return {"error": f"Invalid token: {str(e)}"}
-    except Exception as e:
-        print(f"Unexpected error during token verification: {str(e)}")
-        return {"error": f"Token verification error: {str(e)}"}
-
-def create_admin(name, email, password):
-    """Create a new admin (called from terminal/script)"""
-    connection = get_db_connection()
-    if connection is None:
-        return {"error": "Database connection failed"}
-    
-    cursor = connection.cursor()
-    hashed_password = hash_password(password)
-    
-    try:
-        # Check if email already exists
-        cursor.execute("SELECT id FROM admins WHERE email = %s", (email,))
-        if cursor.fetchone():
-            return {"error": "Admin email already exists"}
-        
-        # Insert the new admin
-        query = """
-        INSERT INTO admins (name, email, password)
-        VALUES (%s, %s, %s)
-        """
-        cursor.execute(query, (name, email, hashed_password))
-        connection.commit()
-        
-        return {
-            "success": True,
-            "admin_id": cursor.lastrowid,
-            "name": name
-        }
-    except Exception as e:
-        print(f"Error creating admin: {e}")
-        return {"error": str(e)}
-    finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
