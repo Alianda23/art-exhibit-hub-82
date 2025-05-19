@@ -4,10 +4,10 @@ import ArtworkCard from './ArtworkCard';
 import { Artwork } from '@/types';
 
 interface ArtworkRecommendationsProps {
-  currentArtworkId: string;
+  currentArtworkId?: string;
 }
 
-const ArtworkRecommendations: React.FC<ArtworkRecommendationsProps> = ({ currentArtworkId }) => {
+const ArtworkRecommendations: React.FC<ArtworkRecommendationsProps> = ({ currentArtworkId = '' }) => {
   const [recommendations, setRecommendations] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
 
