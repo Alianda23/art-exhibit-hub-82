@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { Menu, X, User, LogOut, Building } from 'lucide-react';
 
 const Navbar = () => {
   const { isAuthenticated, isAdmin, logout, currentUser } = useAuth();
@@ -64,7 +64,11 @@ const Navbar = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
+                      {currentUser?.isCorporate ? (
+                        <Building className="h-4 w-4" />
+                      ) : (
+                        <User className="h-4 w-4" />
+                      )}
                       {currentUser?.name}
                     </Button>
                   </DropdownMenuTrigger>
@@ -73,6 +77,12 @@ const Navbar = () => {
                       <DropdownMenuItem asChild>
                         <Link to="/admin" className="w-full">
                           Admin Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : currentUser?.isCorporate ? (
+                      <DropdownMenuItem asChild>
+                        <Link to="/corporate-profile" className="w-full">
+                          Corporate Dashboard
                         </Link>
                       </DropdownMenuItem>
                     ) : (
@@ -142,6 +152,14 @@ const Navbar = () => {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Admin Dashboard
+                  </Link>
+                ) : currentUser?.isCorporate ? (
+                  <Link
+                    to="/corporate-profile"
+                    className="block py-2 font-medium text-charcoal"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Corporate Dashboard
                   </Link>
                 ) : (
                   <Link
