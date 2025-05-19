@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,7 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useMobile } from '@/hooks/use-mobile';
 import { Menu, X, User } from 'lucide-react';
 import CartIcon from './CartIcon';
 
@@ -20,7 +18,7 @@ const Navbar = () => {
   const { user, logout, isAdmin, isArtist, isCorporate } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isMobile = useMobile();
+  const isMobile = window.innerWidth < 768;
 
   const handleLogout = () => {
     logout();
@@ -150,7 +148,7 @@ const Navbar = () => {
       </div>
 
       {/* Mobile Menu */}
-      {isOpen && isMobile && (
+      {isOpen && (
         <div className="md:hidden bg-white p-4 absolute top-full left-0 right-0 shadow-md z-50 flex flex-col space-y-4">
           <Link
             to="/"

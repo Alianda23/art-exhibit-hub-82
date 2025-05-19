@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -112,7 +111,7 @@ const ExhibitionDetail = () => {
         </Link>
       </div>
 
-      <ExhibitionDetails exhibition={exhibition} />
+      {exhibition && <ExhibitionDetails exhibition={exhibition} />}
 
       <div className="mt-8 bg-gray-100 rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
